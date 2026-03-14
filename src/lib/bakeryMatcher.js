@@ -5,7 +5,16 @@ function normalizeText(value) {
     .toLowerCase()
 }
 
-export function matchBakeryProduct(itemName, products) {
+export function isOptionLine(name) {
+  const text = String(name || '').trim()
+  return text.startsWith('+') || text.startsWith('ㄴ')
+}
+
+export function isZeroOption(item) {
+  return isOptionLine(item.name) && Number(item.amount || 0) === 0
+}
+
+export function matchCatalogItem(itemName, products) {
   const target = normalizeText(itemName)
   if (!target) return null
 
@@ -20,7 +29,6 @@ export function matchBakeryProduct(itemName, products) {
       if (!normalizedCandidate) continue
 
       let score = 0
-
       if (target === normalizedCandidate) {
         score = 1
       } else if (
@@ -41,47 +49,76 @@ export function matchBakeryProduct(itemName, products) {
 }
 
 export function buildBakeryComputation(items, products) {
+  const normalized = []
   let bakeryTotal = 0
-  const breakdownMap = new Map()
+  const bakeryBreakdownMap = new Map()
+  let previousItem = null
 
-  const normalizedItems = (items || [])
-    .map((item) => {
-      const name = String(item.name || '').trim()
-      const qty = Number(item.qty || 1)
-      const amount = Number(item.amount || 0)
+  for (const raw of items || []) {
+    const item = {
+      name: String(raw.name || '').trim(),
+      qty: Number(raw.qty || 1),
+      amount: Number(raw.amount || 0),
+    }
 
-      const matched = matchBakeryProduct(name, products)
+    if (!item.name) continue
 
-      if (matched && amount > 0) {
-        bakeryTotal += amount
+    if (isOptionLine(item.name)) {
+      if (previousItem && item.amount > 0) {
+        previousItem.amount += item.amount
 
-        const key = matched.id || matched.name
-        if (!breakdownMap.has(key)) {
-          breakdownMap.set(key, {
-            name: matched.name,
-            qty: 0,
-            amount: 0,
-          })
+        if (previousItem.isBakery) {
+          bakeryTotal += item.amount
+
+          const key = previousItem.matchedBakeryName
+          if (!bakeryBreakdownMap.has(key)) {
+            bakeryBreakdownMap.set(key, {
+              name: previousItem.matchedBakeryName,
+              qty: 0,
+              amount: 0,
+            })
+          }
+          bakeryBreakdownMap.get(key).amount += item.amount
         }
+      }
+      continue
+    }
 
-        const row = breakdownMap.get(key)
-        row.qty += qty
-        row.amount += amount
+    const matched = matchCatalogItem(item.name, products)
+    const isBakery = !!matched && matched.countInBakeryTotal !== false
+
+    const row = {
+      ...item,
+      isBakery,
+      matchedBakeryName: matched?.name || null,
+      category: matched?.category || null,
+      group: matched?.group || null,
+    }
+
+    normalized.push(row)
+    previousItem = row
+
+    if (isBakery) {
+      bakeryTotal += row.amount
+
+      const key = row.matchedBakeryName
+      if (!bakeryBreakdownMap.has(key)) {
+        bakeryBreakdownMap.set(key, {
+          name: row.matchedBakeryName,
+          qty: 0,
+          amount: 0,
+        })
       }
 
-      return {
-        name,
-        qty,
-        amount,
-        isBakery: !!matched,
-        matchedBakeryName: matched?.name || null,
-      }
-    })
-    .filter((item) => item.name || item.amount)
+      const target = bakeryBreakdownMap.get(key)
+      target.qty += row.qty
+      target.amount += row.amount
+    }
+  }
 
   return {
-    items: normalizedItems,
+    items: normalized,
     bakeryTotal,
-    bakeryBreakdown: Array.from(breakdownMap.values()),
+    bakeryBreakdown: Array.from(bakeryBreakdownMap.values()),
   }
 }

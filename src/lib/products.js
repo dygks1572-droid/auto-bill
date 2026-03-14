@@ -13,6 +13,8 @@ export async function createProduct(payload) {
     name: payload.name,
     aliases: payload.aliases || [],
     category: payload.category || 'bakery',
+    group: payload.group || 'default',
+    countInBakeryTotal: payload.countInBakeryTotal !== false,
     active: true,
     createdAt: serverTimestamp(),
   })
