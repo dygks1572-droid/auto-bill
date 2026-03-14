@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createReceipt } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
 import { buildBakeryComputation } from '../lib/bakeryMatcher'
+import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
 
 function todayString() {
   const now = new Date()
@@ -24,6 +25,7 @@ export default function UploadPage() {
   const [items, setItems] = useState([emptyItem()])
   const [products, setProducts] = useState([])
   const [saving, setSaving] = useState(false)
+  const [autoReading, setAutoReading] = useState(false)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
@@ -55,6 +57,30 @@ export default function UploadPage() {
       if (prev.length === 1) return [emptyItem()]
       return prev.filter((_, i) => i !== index)
     })
+  }
+
+  async function handleAutoRead() {
+    if (!file) return
+    setAutoReading(true)
+    setMessage('')
+
+    try {
+      const parsed = await parseReceiptImage(file)
+      const filled = buildAutofillStateFromParsed(parsed, products)
+
+      if (filled.source) setSource(filled.source)
+      if (filled.orderedDate) setOrderedDate(filled.orderedDate)
+      if (filled.orderTotal) setOrderTotal(String(filled.orderTotal))
+      if (filled.items?.length) setItems(filled.items)
+      if (filled.note) setNote(filled.note)
+
+      setMessage(`자동 읽기 완료 (신뢰도 ${Math.round((filled.confidence || 0) * 100)}%)`)
+    } catch (err) {
+      console.error(err)
+      setMessage(err?.message || '자동 읽기 실패')
+    } finally {
+      setAutoReading(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -109,6 +135,10 @@ export default function UploadPage() {
             <img src={previewUrl} alt="preview" className="preview" />
           </div>
         )}
+
+        <button type="button" onClick={handleAutoRead} disabled={!file || autoReading}>
+          {autoReading ? '자동 읽는 중...' : '사진 자동 읽기'}
+        </button>
 
         <label>
           채널
