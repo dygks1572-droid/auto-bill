@@ -76,6 +76,62 @@ textarea {
   gap: 6px;
 }
 
+.itemSection {
+  display: grid;
+  gap: 12px;
+}
+
+.itemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.itemRowCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.itemRowGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.itemMatch {
+  display: flex;
+  gap: 8px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.tag.bakery {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tag.normal {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.nestedCard {
+  background: #f8fafc;
+}
+
+.miniList {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
 .previewWrap {
   display: flex;
   justify-content: center;

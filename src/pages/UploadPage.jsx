@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createReceipt } from '../lib/receipts'
+import { listenProducts } from '../lib/products'
+import { buildBakeryComputation } from '../lib/bakeryMatcher'
 
 function todayString() {
   const now = new Date()
@@ -9,20 +11,51 @@ function todayString() {
   return `${y}-${m}-${d}`
 }
 
+function emptyItem() {
+  return { name: '', qty: 1, amount: '' }
+}
+
 export default function UploadPage() {
   const [file, setFile] = useState(null)
   const [source, setSource] = useState('coupang-eats')
   const [orderedDate, setOrderedDate] = useState(todayString())
   const [orderTotal, setOrderTotal] = useState('')
-  const [bakeryTotal, setBakeryTotal] = useState('')
   const [note, setNote] = useState('')
+  const [items, setItems] = useState([emptyItem()])
+  const [products, setProducts] = useState([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const unsub = listenProducts(setProducts)
+    return () => unsub?.()
+  }, [])
 
   const previewUrl = useMemo(() => {
     if (!file) return ''
     return URL.createObjectURL(file)
   }, [file])
+
+  const computed = useMemo(() => {
+    return buildBakeryComputation(items, products)
+  }, [items, products])
+
+  function updateItem(index, field, value) {
+    setItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+    )
+  }
+
+  function addItemRow() {
+    setItems((prev) => [...prev, emptyItem()])
+  }
+
+  function removeItemRow(index) {
+    setItems((prev) => {
+      if (prev.length === 1) return [emptyItem()]
+      return prev.filter((_, i) => i !== index)
+    })
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -30,30 +63,27 @@ export default function UploadPage() {
     setMessage('')
 
     try {
-      console.time('saveReceipt')
-
       await Promise.race([
         createReceipt({
           source,
           imageName: file?.name || '',
           orderedDate,
           orderTotal,
-          bakeryTotal,
+          bakeryTotal: computed.bakeryTotal,
+          bakeryBreakdown: computed.bakeryBreakdown,
+          items: computed.items,
           note,
         }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Firestore write timeout (10s)')), 10000),
-        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('저장 시간 초과')), 10000)),
       ])
 
-      console.timeEnd('saveReceipt')
       setFile(null)
       setOrderTotal('')
-      setBakeryTotal('')
       setNote('')
+      setItems([emptyItem()])
       setMessage('저장 완료')
     } catch (err) {
-      console.error('save error:', err)
+      console.error(err)
       setMessage(err?.message || '저장 실패')
     } finally {
       setSaving(false)
@@ -106,23 +136,91 @@ export default function UploadPage() {
           />
         </label>
 
-        <label>
-          베이커리 합계
-          <input
-            type="number"
-            inputMode="numeric"
-            value={bakeryTotal}
-            onChange={(e) => setBakeryTotal(e.target.value)}
-            placeholder="예: 3500"
-          />
-        </label>
+        <div className="itemSection">
+          <div className="itemHeader">
+            <h3>품목 입력</h3>
+            <button type="button" onClick={addItemRow}>
+              + 품목 추가
+            </button>
+          </div>
+
+          {items.map((item, index) => {
+            const matched = buildBakeryComputation([item], products).items[0]
+
+            return (
+              <div key={index} className="itemRowCard">
+                <label>
+                  품목명
+                  <input
+                    value={item.name}
+                    onChange={(e) => updateItem(index, 'name', e.target.value)}
+                    placeholder="예: 에그타르트"
+                  />
+                </label>
+
+                <div className="itemRowGrid">
+                  <label>
+                    수량
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.qty}
+                      onChange={(e) => updateItem(index, 'qty', e.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    금액
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={item.amount}
+                      onChange={(e) => updateItem(index, 'amount', e.target.value)}
+                      placeholder="예: 3500"
+                    />
+                  </label>
+                </div>
+
+                <div className="itemMatch">
+                  {matched?.isBakery ? (
+                    <span className="tag bakery">베이커리 매칭: {matched.matchedBakeryName}</span>
+                  ) : (
+                    <span className="tag normal">베이커리 아님</span>
+                  )}
+                </div>
+
+                <button type="button" onClick={() => removeItemRow(index)}>
+                  삭제
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="card nestedCard">
+          <h3>자동 계산</h3>
+          <p>
+            베이커리 합계: <strong>{computed.bakeryTotal.toLocaleString()}원</strong>
+          </p>
+          {computed.bakeryBreakdown.length > 0 ? (
+            <ul className="miniList">
+              {computed.bakeryBreakdown.map((item) => (
+                <li key={item.name}>
+                  {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>매칭된 베이커리 품목이 없습니다.</p>
+          )}
+        </div>
 
         <label>
           메모
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="예: 에그타르트만 베이커리 포함"
+            placeholder="예: 디카페인 옵션은 베이커리 제외"
           />
         </label>
 

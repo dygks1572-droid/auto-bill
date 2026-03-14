@@ -23,14 +23,35 @@ export default function SummaryPage() {
   }, [orderedDate])
 
   const summary = useMemo(() => {
-    return rows.reduce(
+    const bakeryMap = new Map()
+
+    const base = rows.reduce(
       (acc, row) => {
         acc.orderTotal += Number(row.orderTotal || 0)
         acc.bakeryTotal += Number(row.bakeryTotal || 0)
+
+        for (const item of row.bakeryBreakdown || []) {
+          if (!bakeryMap.has(item.name)) {
+            bakeryMap.set(item.name, {
+              name: item.name,
+              qty: 0,
+              amount: 0,
+            })
+          }
+          const target = bakeryMap.get(item.name)
+          target.qty += Number(item.qty || 0)
+          target.amount += Number(item.amount || 0)
+        }
+
         return acc
       },
       { orderTotal: 0, bakeryTotal: 0 },
     )
+
+    return {
+      ...base,
+      bakeryItems: Array.from(bakeryMap.values()).sort((a, b) => b.amount - a.amount),
+    }
   }, [rows])
 
   return (
@@ -54,6 +75,26 @@ export default function SummaryPage() {
           <h3>베이커리 합계</h3>
           <strong>{formatWon(summary.bakeryTotal)}원</strong>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>베이커리 품목별 합계</h3>
+        {summary.bakeryItems.length === 0 ? (
+          <p>매칭된 베이커리 품목이 없습니다.</p>
+        ) : (
+          <ul className="receiptList">
+            {summary.bakeryItems.map((item) => (
+              <li key={item.name}>
+                <div>
+                  <strong>{item.name}</strong>
+                </div>
+                <div>
+                  수량 {item.qty} / 금액 {formatWon(item.amount)}원
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="card">

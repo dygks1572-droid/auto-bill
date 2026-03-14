@@ -17,8 +17,9 @@ export async function createReceipt(payload) {
     orderedDate: payload.orderedDate,
     orderTotal: Number(payload.orderTotal || 0),
     bakeryTotal: Number(payload.bakeryTotal || 0),
+    bakeryBreakdown: payload.bakeryBreakdown || [],
+    items: payload.items || [],
     note: payload.note || '',
-    bakeryItems: payload.bakeryItems || [],
     createdAt: serverTimestamp(),
   })
 }
