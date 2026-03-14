@@ -21,31 +21,64 @@ textarea {
   font: inherit;
 }
 
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: white;
+  color: #111827;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
 .app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px 16px 32px;
 }
 
 .topbar {
   position: sticky;
   top: 0;
-  background: #f8fafc;
-  padding-bottom: 12px;
+  z-index: 10;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(10px);
+  padding: 8px 0 12px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 2rem);
 }
 
 .tabs {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tabs button {
   flex: 1;
+  min-width: 104px;
   border: 1px solid #cbd5e1;
   background: white;
   border-radius: 12px;
   padding: 12px;
+  color: #111827;
+  white-space: nowrap;
 }
 
 .tabs button.active {
@@ -85,6 +118,7 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .itemRowCard {
@@ -132,6 +166,25 @@ textarea {
   padding-left: 18px;
 }
 
+.parseResult {
+  display: grid;
+  gap: 14px;
+}
+
+.parseGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.parseGrid p {
+  margin: 4px 0 0;
+}
+
+.compactList {
+  margin-top: 10px;
+}
+
 .previewWrap {
   display: flex;
   justify-content: center;
@@ -149,6 +202,7 @@ button {
   padding: 12px 16px;
   background: #0f766e;
   color: white;
+  font-weight: 600;
 }
 
 .summaryGrid {
@@ -185,7 +239,55 @@ button {
 }
 
 @media (max-width: 640px) {
+  .app {
+    padding: 12px 12px 24px;
+  }
+
+  .topbar {
+    top: 0;
+    margin: 0 -12px;
+    padding: 12px 12px 14px;
+  }
+
+  .tabs {
+    gap: 6px;
+  }
+
+  .tabs button {
+    flex: 0 0 auto;
+    padding: 11px 14px;
+  }
+
   .summaryGrid {
     grid-template-columns: 1fr;
+  }
+
+  .parseGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .itemHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .itemRowGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .itemMatch {
+    flex-wrap: wrap;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }

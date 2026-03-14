@@ -27,6 +27,7 @@ export default function UploadPage() {
   const [saving, setSaving] = useState(false)
   const [autoReading, setAutoReading] = useState(false)
   const [message, setMessage] = useState('')
+  const [parsedReceipt, setParsedReceipt] = useState(null)
 
   useEffect(() => {
     const unsub = listenProducts(setProducts)
@@ -67,6 +68,7 @@ export default function UploadPage() {
     try {
       const parsed = await parseReceiptImage(file)
       const filled = buildAutofillStateFromParsed(parsed, products)
+      setParsedReceipt(parsed)
 
       if (filled.source) setSource(filled.source)
       if (filled.orderedDate) setOrderedDate(filled.orderedDate)
@@ -77,6 +79,7 @@ export default function UploadPage() {
       setMessage(`자동 읽기 완료 (신뢰도 ${Math.round((filled.confidence || 0) * 100)}%)`)
     } catch (err) {
       console.error(err)
+      setParsedReceipt(null)
       setMessage(err?.message || '자동 읽기 실패')
     } finally {
       setAutoReading(false)
@@ -107,6 +110,7 @@ export default function UploadPage() {
       setOrderTotal('')
       setNote('')
       setItems([emptyItem()])
+      setParsedReceipt(null)
       setMessage('저장 완료')
     } catch (err) {
       console.error(err)
@@ -139,6 +143,58 @@ export default function UploadPage() {
         <button type="button" onClick={handleAutoRead} disabled={!file || autoReading}>
           {autoReading ? '자동 읽는 중...' : '사진 자동 읽기'}
         </button>
+
+        {parsedReceipt && (
+          <div className="card nestedCard parseResult">
+            <h3>자동 읽기 결과</h3>
+            <div className="parseGrid">
+              <div>
+                <strong>출처</strong>
+                <p>{parsedReceipt.source || '-'}</p>
+              </div>
+              <div>
+                <strong>문서 유형</strong>
+                <p>{parsedReceipt.documentType || '-'}</p>
+              </div>
+              <div>
+                <strong>주문일</strong>
+                <p>{parsedReceipt.orderedDate || '-'}</p>
+              </div>
+              <div>
+                <strong>주문금액</strong>
+                <p>
+                  {typeof parsedReceipt.orderTotal === 'number'
+                    ? parsedReceipt.orderTotal.toLocaleString()
+                    : parsedReceipt.orderTotal || '-'}
+                </p>
+              </div>
+              <div>
+                <strong>총액 라벨</strong>
+                <p>{parsedReceipt.totalLabel || '-'}</p>
+              </div>
+              <div>
+                <strong>신뢰도</strong>
+                <p>{Math.round((parsedReceipt.confidence || 0) * 100)}%</p>
+              </div>
+            </div>
+
+            <div>
+              <strong>추출 품목</strong>
+              {parsedReceipt.items?.length ? (
+                <ul className="miniList compactList">
+                  {parsedReceipt.items.map((item, index) => (
+                    <li key={`${item.name}-${index}`}>
+                      {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
+                      {item.isOption ? ' / 옵션' : ''}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>추출된 품목이 없습니다.</p>
+              )}
+            </div>
+          </div>
+        )}
 
         <label>
           채널
