@@ -239,10 +239,26 @@ function baseOptionName(rawName) {
     .replace(/\s+/g, ' ')
 }
 
+function isFinancierOptionLine(rawName) {
+  const trimmed = String(rawName ?? '').trim()
+  if (!trimmed) return false
+
+  const normalized = normalizeText(trimmed)
+  const optionNames = OPTION_NAMES.map((name) => normalizeText(name)).filter(Boolean)
+  const hasOptionKeyword = optionNames.some(
+    (name) => normalized === name || normalized.endsWith(name) || normalized.includes(name),
+  )
+  const hasOptionPrice = /(?:^|\s)\+?\d{1,4}(?:원)?(?:\s|$)/.test(trimmed)
+  const mentionsFinancier = /휘낭시에/.test(trimmed)
+
+  return hasOptionKeyword && (hasOptionPrice || mentionsFinancier)
+}
+
 export function isOptionLineName(rawName) {
   const trimmed = String(rawName ?? '').trim()
   if (!trimmed) return false
   if (/^[+ㄴ]\s*/.test(trimmed)) return true
+  if (isFinancierOptionLine(trimmed)) return true
 
   const normalized = normalizeText(trimmed)
   return OPTION_NAMES.some((name) => normalizeText(name) === normalized)
@@ -355,7 +371,8 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
     const suggestions = (matched?.suggestions || rankCatalogCandidates(lookupName, products))
       .filter((item) => item.score >= SUGGESTION_THRESHOLD)
       .slice(0, MAX_SUGGESTIONS)
-    const isOption = optionLine || matched?.optionLike
+    const financierOption = isFinancierOptionLine(lookupName)
+    const isOption = optionLine || financierOption || matched?.optionLike
 
     if (isOption) {
       const optionRow = {
