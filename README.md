@@ -20,7 +20,9 @@ cp .dev.vars.example .dev.vars
 
 ```dotenv
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4.1
+OPENAI_RESCUE_MODEL=gpt-4.1
+OPENAI_IMAGE_DETAIL=high
 ```
 
 `VITE_RECEIPT_API_URL`은 비워두면 기본값으로 `/api/parse-receipt`를 사용합니다. 프론트엔드가 별도 백엔드를 호출해야 할 때만 절대 URL을 넣으면 됩니다.
@@ -62,6 +64,25 @@ npm run dev:pages
 Cloudflare Pages에 배포할 때는 다음 시크릿을 설정해야 합니다.
 
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL` (선택, 기본값 `gpt-4o-mini`)
+- `OPENAI_MODEL` (선택, 추천 `gpt-4.1`, 현재 기본값 `gpt-4.1`)
+- `OPENAI_RESCUE_MODEL` (선택, 추천 `gpt-4.1`)
+- `OPENAI_IMAGE_DETAIL` (선택, 기본값 `high`)
 
 빌드 출력 디렉터리는 [`wrangler.toml`](/home/user/bill/wrangler.toml#L1)에 맞춰 `dist`입니다.
+
+## 모델 비교 테스트
+
+영수증 인식 모델을 비교하려면 `.dev.vars`에서 아래처럼 바꿔가며 테스트하면 됩니다.
+
+```dotenv
+OPENAI_MODEL=gpt-4.1
+OPENAI_RESCUE_MODEL=gpt-4.1
+OPENAI_IMAGE_DETAIL=high
+```
+
+비교 추천:
+
+- `gpt-4o-mini`: 비용 기준 비교용
+- `gpt-4.1`: 품질/이미지 토큰 효율 비교용
+
+OpenAI Platform에서 수동 테스트할 때는 [docs/openai-platform-receipt-prompt.md](/home/user/bill/docs/openai-platform-receipt-prompt.md)를 그대로 복사해서 쓰면 됩니다.

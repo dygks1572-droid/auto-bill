@@ -8,16 +8,9 @@ const receiptSchema = {
         type: 'string',
         enum: ['쿠팡이츠', '배민', '픽업', '매장 POS', '알 수 없음'],
       },
-      documentType: {
-        type: 'string',
-        enum: ['쿠팡-숏', '배민-롱', '픽업-슬립', '스토어-포스', '알 수 없음'],
-      },
       orderedDate: {
         type: ['string', 'null'],
         description: 'YYYY-MM-DD if visible, otherwise null.',
-      },
-      totalLabel: {
-        type: ['string', 'null'],
       },
       orderTotal: {
         type: ['integer', 'null'],
@@ -37,24 +30,8 @@ const receiptSchema = {
           required: ['name', 'qty', 'amount', 'isOption', 'optionCharge'],
         },
       },
-      notes: {
-        type: 'array',
-        items: { type: 'string' },
-      },
-      confidence: {
-        type: 'number',
-      },
     },
-    required: [
-      'source',
-      'documentType',
-      'orderedDate',
-      'totalLabel',
-      'orderTotal',
-      'items',
-      'notes',
-      'confidence',
-    ],
+    required: ['source', 'orderedDate', 'orderTotal', 'items'],
   },
   strict: true,
 }
@@ -95,13 +72,7 @@ function normalizeName(value) {
 }
 
 function hasSuspiciousItems(items) {
-  const suspiciousPatterns = [
-    /스딩워치/,
-    /그래백리/,
-    /깨비빔밥/,
-    /이즈드랍/,
-    /세드위치/,
-  ]
+  const suspiciousPatterns = [/스딩워치/, /그래백리/, /깨비빔밥/, /이즈드랍/, /세드위치/]
 
   return (items || []).some((item) => {
     const name = normalizeName(item?.name)
@@ -109,16 +80,28 @@ function hasSuspiciousItems(items) {
   })
 }
 
+function getParseScore(parsed) {
+  const items = Array.isArray(parsed?.items) ? parsed.items : []
+  const nonOptionItems = items.filter((item) => !item?.isOption && String(item?.name || '').trim())
+  const hasOptions = items.some((item) => item?.isOption)
+
+  let score = 0
+  if (parsed?.orderTotal && parsed.orderTotal > 0) score += 3
+  if (nonOptionItems.length) score += 3
+  score += Math.min(nonOptionItems.length, 4)
+  if (hasOptions) score += 1
+  if (!hasSuspiciousItems(items)) score += 2
+  return score
+}
+
 function shouldRetryParsedResult(parsed) {
   const items = Array.isArray(parsed?.items) ? parsed.items : []
   const nonOptionItems = items.filter((item) => !item?.isOption && String(item?.name || '').trim())
   const hasOptions = items.some((item) => item?.isOption)
-  const confidence = Number(parsed?.confidence || 0)
 
   if (!items.length) return true
   if (!parsed?.orderTotal || parsed.orderTotal <= 0) return true
   if (!nonOptionItems.length) return true
-  if (confidence < 0.82) return true
   if (hasSuspiciousItems(items)) return true
   if (nonOptionItems.length === 1 && hasOptions) return true
 
@@ -194,7 +177,7 @@ export async function onRequestPost(context) {
 
     const baseDeveloperPrompt = [
       'Extract only visible data from a Korean cafe or bakery receipt.',
-      'Detect source, documentType, orderedDate, totalLabel, orderTotal, item rows, notes, confidence.',
+      'Detect source, orderedDate, orderTotal, and item rows.',
       'Common layouts: Coupang Eats short slip, Baemin long receipt, pickup slip, store POS.',
       'Prefer total labels in this order: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
       'Do not add unreadable or missing text.',
@@ -203,7 +186,7 @@ export async function onRequestPost(context) {
       'For financier options, treat rows like 플레인 +0, 무화과 +400원, 약과 +400원, 발로나초코 +800원, 고르곤졸라크림치즈 +600원 as option rows with isOption=true and optionCharge set to the surcharge.',
       'Also treat rows like +0 플레인, +400 무화과, +400 약과, +800 발로나초코, +600 고르곤졸라크림치즈 and 휘낭시에 플레인/무화과/약과/발로나초코/고르곤졸라크림치즈 as financier option rows when they appear under a financier item.',
       'Use qty=1 when quantity is unclear.',
-      'Do not include delivery fee unless the chosen total label includes it.',
+      'Do not include delivery fee unless the chosen total includes it.',
       'orderedDate must be YYYY-MM-DD or null.',
       'Preserve line-by-line row structure when visible.',
       'Prefer reading the exact printed Korean text over guessing similar words.',
@@ -211,7 +194,7 @@ export async function onRequestPost(context) {
     ].join(' ')
 
     const primaryUserPrompt = `Analyze receipt image ${fileName} carefully and return the schema only. Read small, faint, low-contrast, and tightly packed text carefully.`
-    const model = env.OPENAI_MODEL || 'gpt-4o-mini'
+    const model = env.OPENAI_MODEL || 'gpt-4.1'
 
     let parsed
     try {
@@ -221,20 +204,18 @@ export async function onRequestPost(context) {
         mimeType,
         developerPrompt: baseDeveloperPrompt,
         userPrompt: primaryUserPrompt,
-        maxOutputTokens: 1800,
+        maxOutputTokens: 1500,
         model,
       })
     } catch (error) {
       return json({ error: 'OpenAI request failed', detail: error?.message || 'Unknown parse error' }, 500)
     }
 
-    let rescueUsed = false
-
     if (shouldRetryParsedResult(parsed)) {
       const rescueDeveloperPrompt = [
         baseDeveloperPrompt,
         'Re-read the receipt from scratch when the first extraction looks weak.',
-        'Focus on item rows, option rows, and total row before deciding confidence.',
+        'Focus on item rows, option rows, and total row.',
         'Do not collapse multiple lines into one item if separate rows are visible.',
         'If a product name is partially unclear, keep the closest visible spelling from the receipt rather than inventing a new word.',
         'Be extra careful with bakery names, sandwich names, drip coffee names, and financier option rows.',
@@ -248,23 +229,15 @@ export async function onRequestPost(context) {
           mimeType,
           developerPrompt: rescueDeveloperPrompt,
           userPrompt: rescueUserPrompt,
-          maxOutputTokens: 2200,
+          maxOutputTokens: 1900,
           model: env.OPENAI_RESCUE_MODEL || model,
         })
 
-        if (!shouldRetryParsedResult(retried) || Number(retried?.confidence || 0) >= Number(parsed?.confidence || 0)) {
+        if (getParseScore(retried) >= getParseScore(parsed)) {
           parsed = retried
-          rescueUsed = true
         }
       } catch (error) {
         console.warn('Receipt rescue parse failed', error)
-      }
-    }
-
-    if (rescueUsed) {
-      parsed = {
-        ...parsed,
-        notes: [...(parsed.notes || []), 'internal-rescue-used'],
       }
     }
 

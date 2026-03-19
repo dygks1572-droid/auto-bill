@@ -331,13 +331,7 @@ export function buildAutofillStateFromParsed(parsed, products) {
     })),
     bakeryTotal: bakery.bakeryTotal,
     bakeryBreakdown: bakery.bakeryBreakdown,
-    note: [
-      parsed?.documentType ? `문서유형: ${parsed.documentType}` : '',
-      parsed?.totalLabel ? `총액라벨: ${parsed.totalLabel}` : '',
-      ...(parsed?.notes || []),
-    ]
-      .filter(Boolean)
-      .join(' / '),
-    confidence: parsed?.confidence || 0,
+    note: '',
+    confidence: items.length ? 1 : 0,
   }
 }

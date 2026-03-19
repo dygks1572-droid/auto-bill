@@ -225,12 +225,8 @@ export default function UploadPage() {
           analysis: entry.parsedReceipt
             ? {
                 source: entry.parsedReceipt.source || null,
-                documentType: entry.parsedReceipt.documentType || null,
                 orderedDate: entry.parsedReceipt.orderedDate || null,
-                totalLabel: entry.parsedReceipt.totalLabel || null,
                 orderTotal: entry.parsedReceipt.orderTotal ?? null,
-                confidence: entry.parsedReceipt.confidence ?? null,
-                notes: entry.parsedReceipt.notes || [],
                 items: entry.parsedReceipt.items || [],
               }
             : null,
