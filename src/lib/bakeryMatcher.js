@@ -4,6 +4,28 @@ const MATCH_THRESHOLD = 72
 const SUGGESTION_THRESHOLD = 48
 const MAX_SUGGESTIONS = 3
 const LEARNED_ALIAS_STORAGE_KEY = 'bill.learned-bakery-aliases.v1'
+const OCR_NAME_CORRECTIONS = [
+  {
+    target: '잠봉뵈르 샌드위치',
+    patterns: [
+      /^장별.*세드위치$/,
+      /^잠별.*세드위치$/,
+      /^장봉.*세드위치$/,
+      /^잠봉.*세드위치$/,
+      /^장별블랙.*$/,
+    ],
+  },
+  {
+    target: '호두 크랜베리 깜빠뉴',
+    patterns: [
+      /^홍두깨비빔밥$/,
+      /^호두깨비빔밥$/,
+      /^홍두.*빔밥$/,
+      /^호두.*빔밥$/,
+    ],
+  },
+]
+
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
@@ -20,7 +42,7 @@ function parseNumber(value, fallback = 0) {
 
 function normalizeBakeryVariants(value) {
   return String(value ?? '')
-    .replace(/잠봉s*뵈르|잠봉뵈르|잠봉보에르|잠봉브외르|잠봉베르|잠봉뵈어/gi, '잠봉뵈르')
+    .replace(/잠봉\s*뵈르|잠봉뵈르|잠봉보에르|잠봉브외르|잠봉베르|잠봉뵈어/gi, '잠봉뵈르')
     .replace(/샌드윗치|샌드위치|샌드위티|샌드위/gi, '샌드위치')
     .replace(/깜파뉴|캄파뉴|캄빠뉴|깜빠뉴/gi, '깜빠뉴')
     .replace(/크랜배리|크렌베리|크렌배리/gi, '크랜베리')
@@ -42,6 +64,19 @@ function stripDecorators(value) {
 
 export function normalizeText(value) {
   return stripDecorators(value).replace(/\s+/g, '').toLowerCase()
+}
+
+function correctKnownOcrName(rawName) {
+  const normalized = normalizeText(rawName)
+  if (!normalized) return { correctedName: String(rawName ?? '').trim(), correctionTarget: null }
+
+  for (const rule of OCR_NAME_CORRECTIONS) {
+    if (rule.patterns.some((pattern) => pattern.test(normalized))) {
+      return { correctedName: rule.target, correctionTarget: rule.target }
+    }
+  }
+
+  return { correctedName: String(rawName ?? '').trim(), correctionTarget: null }
 }
 
 function readLearnedAliases() {
@@ -292,9 +327,11 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
 
     if (!name) continue
 
-    const optionLine = isOptionLineName(name)
-    const matched = matchCatalogItem(name, products)
-    const suggestions = (matched?.suggestions || rankCatalogCandidates(name, products))
+    const { correctedName, correctionTarget } = correctKnownOcrName(name)
+    const lookupName = correctedName || name
+    const optionLine = isOptionLineName(lookupName)
+    const matched = matchCatalogItem(lookupName, products)
+    const suggestions = (matched?.suggestions || rankCatalogCandidates(lookupName, products))
       .filter((item) => item.score >= SUGGESTION_THRESHOLD)
       .slice(0, MAX_SUGGESTIONS)
     const isOption = optionLine || matched?.optionLike
@@ -305,11 +342,12 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
         qty,
         amount,
         isOption: true,
-        baseOptionName: baseOptionName(name),
+        baseOptionName: baseOptionName(lookupName),
         matchedCatalogName: matched?.name || null,
         matchedBakeryName: matched?.name || null,
         category: matched?.category || 'option',
         countInBakeryTotal: false,
+        correctedName: correctionTarget,
         suggestions,
       }
 
@@ -339,6 +377,7 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
       name,
       qty,
       amount,
+      correctedName: correctionTarget,
       baseAmount: amount,
       optionCharge: 0,
       finalAmount: amount,
