@@ -1,16 +1,67 @@
-# React + Vite
+# 배달 주문 정리
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+영수증 이미지를 업로드하면 OpenAI Responses API로 품목과 주문 금액을 읽어와서 입력을 보조하는 React + Vite + Cloudflare Pages Functions 프로젝트입니다.
 
-Currently, two official plugins are available:
+## 환경 설정
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+프론트엔드 환경 변수:
 
-## React Compiler
+```bash
+cp .env.example .env
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+서버 함수 환경 변수:
 
-## Expanding the ESLint configuration
+```bash
+cp .dev.vars.example .dev.vars
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+`.dev.vars`에는 실제 OpenAI 키를 넣어야 합니다.
+
+```dotenv
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+```
+
+`VITE_RECEIPT_API_URL`은 비워두면 기본값으로 `/api/parse-receipt`를 사용합니다. 프론트엔드가 별도 백엔드를 호출해야 할 때만 절대 URL을 넣으면 됩니다.
+
+## 로컬 실행
+
+터미널 1:
+
+```bash
+npm run dev
+```
+
+터미널 2:
+
+```bash
+npm run dev:pages
+```
+
+구성 방식:
+
+- Vite는 앱을 `5173` 포트에서 띄웁니다.
+- `wrangler pages dev`는 Functions를 `8788` 포트에서 띄웁니다.
+- `vite.config.js`가 `/api` 요청을 `8788`로 프록시하므로 브라우저에서는 그대로 `/api/parse-receipt`를 호출하면 됩니다.
+- `npm run dev`는 `--strictPort`를 사용하므로 `5173`이 이미 사용 중이면 자동으로 다른 포트로 바뀌지 않고 바로 실패합니다. 이게 더 안전합니다. Pages 프록시는 `5173`을 전제로 동작합니다.
+
+접속 주소:
+
+- 앱: `http://127.0.0.1:5173`
+- Functions 프록시 포함 주소: `http://127.0.0.1:8788`
+
+문제가 생기면 먼저 확인할 것:
+
+- `5173` 또는 `8788` 포트를 이미 다른 프로세스가 쓰고 있지 않은지 확인
+- Node 버전이 최소 `20.19.0` 이상인지 확인
+- `.dev.vars`에 `OPENAI_API_KEY`가 들어 있는지 확인
+
+## 배포
+
+Cloudflare Pages에 배포할 때는 다음 시크릿을 설정해야 합니다.
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (선택, 기본값 `gpt-4o-mini`)
+
+빌드 출력 디렉터리는 [`wrangler.toml`](/home/user/bill/wrangler.toml#L1)에 맞춰 `dist`입니다.

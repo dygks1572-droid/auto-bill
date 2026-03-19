@@ -3,7 +3,6 @@ import {
   findTotal,
   lineContainsAny,
   normalizeLine,
-  normalizeKey,
   parseMoney,
   splitLines,
 } from './findTotal.js';

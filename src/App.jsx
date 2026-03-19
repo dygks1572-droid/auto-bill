@@ -29,6 +29,8 @@ export default function App() {
         {tab === 'summary' && <SummaryPage />}
         {tab === 'products' && <ProductsPage />}
       </main>
+
+      <p className="appFootnote">Cloudflare redeploy build active</p>
     </div>
   )
 }

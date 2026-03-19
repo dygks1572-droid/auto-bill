@@ -1,5 +1,7 @@
 import { buildBakeryComputation } from './bakeryMatcher'
 
+const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-receipt'
+
 export async function fileToBase64(file) {
   const arrayBuffer = await file.arrayBuffer()
   let binary = ''
@@ -28,7 +30,7 @@ export function normalizeAutoFilledItems(parsedItems) {
 export async function parseReceiptImage(file) {
   const imageBase64 = await fileToBase64(file)
 
-  const response = await fetch('/api/parse-receipt', {
+  const response = await fetch(RECEIPT_API_URL, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
