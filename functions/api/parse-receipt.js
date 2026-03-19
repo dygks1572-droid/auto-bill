@@ -221,7 +221,7 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
             {
               type: 'input_text',
               text:
-                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, option rows, prices, dates, totals, and labels. Keep item names readable, preserve each visible receipt row on its own line when possible, and read faint or low-contrast text carefully. No explanation.',
+                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, option rows, prices, dates, totals, and labels. Keep item names readable, preserve each visible receipt row on its own line when possible, read faint or low-contrast text carefully, and prefer exact characters over guessing similar words. No explanation.',
             },
           ],
         },

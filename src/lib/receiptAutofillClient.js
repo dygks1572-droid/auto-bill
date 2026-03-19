@@ -173,16 +173,23 @@ function enhanceReceiptCanvas(canvas) {
 
   let minLuma = 255
   let maxLuma = 0
+  let totalLuma = 0
+  let pixels = 0
 
   for (let i = 0; i < data.length; i += 4) {
     const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
     if (luma < minLuma) minLuma = luma
     if (luma > maxLuma) maxLuma = luma
+    totalLuma += luma
+    pixels += 1
   }
 
+  const averageLuma = pixels ? totalLuma / pixels : 255
   const range = Math.max(1, maxLuma - minLuma)
-  const contrastBoost = range < 110 ? 1.16 : 1.08
-  const brightnessBoost = range < 110 ? 10 : 4
+  const contrastBoost = range < 120 ? 1.28 : 1.16
+  const brightnessBoost = averageLuma < 200 ? 12 : 6
+  const whiteFloor = averageLuma > 210 ? 232 : 222
+  const darkCeiling = averageLuma < 170 ? 112 : 126
 
   for (let i = 0; i < data.length; i += 4) {
     const red = data[i]
@@ -190,12 +197,19 @@ function enhanceReceiptCanvas(canvas) {
     const blue = data[i + 2]
     const luma = red * 0.299 + green * 0.587 + blue * 0.114
     const normalized = ((luma - minLuma) / range) * 255
-    const boosted = Math.max(0, Math.min(255, normalized * contrastBoost + brightnessBoost))
-    const mix = luma < 210 ? 0.9 : 0.72
+    let boosted = normalized * contrastBoost + brightnessBoost
 
-    data[i] = Math.round(red * (1 - mix) + boosted * mix)
-    data[i + 1] = Math.round(green * (1 - mix) + boosted * mix)
-    data[i + 2] = Math.round(blue * (1 - mix) + boosted * mix)
+    if (boosted >= whiteFloor) {
+      boosted = 255
+    } else if (boosted <= darkCeiling) {
+      boosted = Math.max(0, boosted * 0.72)
+    }
+
+    const sharpenMix = luma < 180 ? 0.96 : 0.82
+    const channel = Math.max(0, Math.min(255, boosted))
+    data[i] = Math.round(red * (1 - sharpenMix) + channel * sharpenMix)
+    data[i + 1] = Math.round(green * (1 - sharpenMix) + channel * sharpenMix)
+    data[i + 2] = Math.round(blue * (1 - sharpenMix) + channel * sharpenMix)
   }
 
   context.putImageData(imageData, 0, 0)
