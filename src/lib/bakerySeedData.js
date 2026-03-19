@@ -213,7 +213,15 @@ const BASE_PRODUCT_SEEDS = [
   product('카스테라', { group: 'cake' }),
   product('앙버터', { group: 'bread' }),
   product('호두 크랜베리 깜빠뉴', {
-    aliases: ['호두크랜베리깜빠뉴'],
+    aliases: [
+      '호두크랜베리깜빠뉴',
+      '호두 크랜베리 캄파뉴',
+      '호두크랜베리캄파뉴',
+      '호두 크렌베리 깜빠뉴',
+      '호두크렌베리깜빠뉴',
+      '호두 크랜배리 깜빠뉴',
+      '호두크랜배리깜빠뉴',
+    ],
     group: 'bread',
   }),
   product('아메리카노', {
@@ -299,7 +307,16 @@ const BASE_PRODUCT_SEEDS = [
     reviewNeeded: true,
   }),
   product('잠봉뵈르 샌드위치', {
-    aliases: ['잠봉뵈르', '잠봉뵈르샌드위치'],
+    aliases: [
+      '잠봉뵈르',
+      '잠봉뵈르샌드위치',
+      '잠봉뵈르샌드',
+      '잠봉 보에르 샌드위치',
+      '잠봉보에르샌드위치',
+      '잠봉 베르 샌드위치',
+      '잠봉베르샌드위치',
+      '잠봉 샌드위치',
+    ],
     category: 'review',
     group: 'sandwich',
     countInBakeryTotal: false,

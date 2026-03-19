@@ -18,8 +18,16 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-function stripDecorators(value) {
+function normalizeBakeryVariants(value) {
   return String(value ?? '')
+    .replace(/잠봉s*뵈르|잠봉뵈르|잠봉보에르|잠봉브외르|잠봉베르|잠봉뵈어/gi, '잠봉뵈르')
+    .replace(/샌드윗치|샌드위치|샌드위티|샌드위/gi, '샌드위치')
+    .replace(/깜파뉴|캄파뉴|캄빠뉴|깜빠뉴/gi, '깜빠뉴')
+    .replace(/크랜배리|크렌베리|크렌배리/gi, '크랜베리')
+}
+
+function stripDecorators(value) {
+  return normalizeBakeryVariants(value)
     .replace(/\([^)]*\)/g, ' ')
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/[{}]/g, ' ')
