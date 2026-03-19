@@ -116,6 +116,7 @@ export async function onRequestPost(context) {
       'Do not add unreadable or missing text.',
       'Include product rows and option rows.',
       'Rows starting with + or ㄴ are options with isOption=true.',
+      'For financier options, lines like 플레인 +0, 무화과 +400원, 약과 +400원, 발로나초코 +800원, 고르곤졸라크림치즈 +600원 are option rows and must have isOption=true.',
       'Use qty=1 when quantity is unclear.',
       'Do not include delivery fee unless the chosen total label includes it.',
       'orderedDate must be YYYY-MM-DD or null.',
