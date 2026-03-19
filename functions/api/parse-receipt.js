@@ -121,9 +121,10 @@ export async function onRequestPost(context) {
       'Use qty=1 when quantity is unclear.',
       'Do not include delivery fee unless the chosen total label includes it.',
       'orderedDate must be YYYY-MM-DD or null.',
+      'Prefer exact item text over guessing similar words, and preserve line-by-line item structure when visible.',
     ].join(' ')
 
-    const userPrompt = `Analyze receipt image ${fileName} and return the schema only.`
+    const userPrompt = `Analyze receipt image ${fileName} carefully and return the schema only. Read small, faint, low-contrast, and tightly packed text carefully.`
 
     const openaiResponse = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -144,7 +145,7 @@ export async function onRequestPost(context) {
               { type: 'input_text', text: userPrompt },
               {
                 type: 'input_image',
-                detail: env.OPENAI_IMAGE_DETAIL || 'auto',
+                detail: env.OPENAI_IMAGE_DETAIL || 'high',
                 image_url: `data:${mimeType};base64,${imageBase64}`,
               },
             ],
@@ -156,6 +157,7 @@ export async function onRequestPost(context) {
             ...receiptSchema,
           },
         },
+        max_output_tokens: 1800,
       }),
     })
 

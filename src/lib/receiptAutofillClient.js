@@ -1,13 +1,13 @@
 import { buildBakeryComputation } from './bakeryMatcher'
 
 const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-receipt'
-const MAX_RECEIPT_EDGE = 1600
-const RECEIPT_JPEG_QUALITY = 0.82
-const ANALYSIS_MAX_EDGE = 1800
-const BACKGROUND_THRESHOLD = 34
+const MAX_RECEIPT_EDGE = 2100
+const RECEIPT_JPEG_QUALITY = 0.9
+const ANALYSIS_MAX_EDGE = 2200
+const BACKGROUND_THRESHOLD = 30
 const MIN_CROP_AREA_RATIO = 0.2
 const MAX_CROP_AREA_RATIO = 0.98
-const CROP_PADDING = 24
+const CROP_PADDING = 32
 
 function loadImageElement(file) {
   return new Promise((resolve, reject) => {
@@ -123,6 +123,44 @@ function detectReceiptBounds(canvas) {
   return { left, top, width: cropWidth, height: cropHeight }
 }
 
+function enhanceReceiptCanvas(canvas) {
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return
+
+  const { width, height } = canvas
+  const imageData = context.getImageData(0, 0, width, height)
+  const { data } = imageData
+
+  let minLuma = 255
+  let maxLuma = 0
+
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+    if (luma < minLuma) minLuma = luma
+    if (luma > maxLuma) maxLuma = luma
+  }
+
+  const range = Math.max(1, maxLuma - minLuma)
+
+  for (let i = 0; i < data.length; i += 4) {
+    const red = data[i]
+    const green = data[i + 1]
+    const blue = data[i + 2]
+    const luma = red * 0.299 + green * 0.587 + blue * 0.114
+    let normalized = ((luma - minLuma) / range) * 255
+
+    if (normalized > 214) normalized = 255
+    if (normalized < 126) normalized *= 0.7
+
+    const mix = luma < 190 ? 0.95 : 0.8
+    data[i] = Math.round(red * (1 - mix) + normalized * mix)
+    data[i + 1] = Math.round(green * (1 - mix) + normalized * mix)
+    data[i + 2] = Math.round(blue * (1 - mix) + normalized * mix)
+  }
+
+  context.putImageData(imageData, 0, 0)
+}
+
 function drawOptimizedReceipt(image) {
   const width = image.naturalWidth || image.width
   const height = image.naturalHeight || image.height
@@ -174,6 +212,7 @@ function drawOptimizedReceipt(image) {
     outputWidth,
     outputHeight,
   )
+  enhanceReceiptCanvas(outputCanvas)
 
   return outputCanvas
 }
