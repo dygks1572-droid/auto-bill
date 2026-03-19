@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReceiptsBatch, listenReceiptsByDate } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
 import { buildBakeryComputation, learnCatalogAlias } from '../lib/bakeryMatcher'
-import { buildAutofillStateFromParsed, parseReceiptImage, prepareReceiptUploads } from '../lib/receiptAutofillClient'
+import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
 
 function todayString() {
   const now = new Date()
@@ -16,11 +16,10 @@ function emptyItem() {
   return { name: '', qty: 1, amount: '' }
 }
 
-function createUploadEntry(file, index, analysisFile = file) {
+function createUploadEntry(file, index) {
   return {
     id: `${file.name}-${file.lastModified}-${index}`,
     file,
-    analysisFile,
     previewUrl: URL.createObjectURL(file),
     orderTotal: '',
     note: '',
@@ -102,7 +101,7 @@ export default function UploadPage() {
       patchUpload(current.id, (entry) => ({ ...entry, status: 'reading', error: '' }))
 
       try {
-        const parsed = await parseReceiptImage(current.analysisFile || current.file)
+        const parsed = await parseReceiptImage(current.file)
         const filled = buildAutofillStateFromParsed(parsed, products)
 
         patchUpload(current.id, (entry) => ({
@@ -134,38 +133,22 @@ export default function UploadPage() {
     setAutoReading(false)
   }
 
-  async function handleFileChange(event) {
+  function handleFileChange(event) {
     const nextFiles = Array.from(event.target.files || [])
 
-    for (const entry of uploadsRef.current) {
-      URL.revokeObjectURL(entry.previewUrl)
-    }
+    setUploads((prev) => {
+      for (const entry of prev) {
+        URL.revokeObjectURL(entry.previewUrl)
+      }
+      return nextFiles.map((file, index) => createUploadEntry(file, index))
+    })
 
     if (!nextFiles.length) {
-      setUploads([])
       setMessage('')
       return
     }
 
-    try {
-      const { prepared, skipped } = await prepareReceiptUploads(nextFiles)
-      const nextUploads = prepared.map((entry, index) =>
-        createUploadEntry(entry.originalFile, index, entry.originalFile),
-      )
-
-      setUploads(nextUploads)
-
-      if (!nextUploads.length) {
-        setMessage(skipped[0]?.reason || '분석 가능한 영수증 사진이 없습니다.')
-        return
-      }
-
-      const skippedMessage = skipped.length ? ` / 제외 ${skipped.length}장` : ''
-      setMessage(`${nextUploads.length}장 선택됨${skippedMessage}. 분석 버튼을 눌러 진행하세요.`)
-    } catch {
-      setUploads(nextFiles.map((file, index) => createUploadEntry(file, index)))
-      setMessage(`${nextFiles.length}장 선택됨. 전처리를 건너뛰고 분석 버튼을 눌러 진행하세요.`)
-    }
+    setMessage(`${nextFiles.length}장 선택됨. 분석 버튼을 눌러 진행하세요.`)
   }
 
   function updateItem(uploadId, itemIndex, field, value) {

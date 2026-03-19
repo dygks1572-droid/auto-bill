@@ -1,14 +1,13 @@
 import { buildBakeryComputation } from './bakeryMatcher'
 
 const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-receipt'
-const MAX_RECEIPT_EDGE = 2200
-const RECEIPT_JPEG_QUALITY = 0.9
-const ANALYSIS_MAX_EDGE = 2100
-const BACKGROUND_THRESHOLD = 28
-const MIN_CROP_AREA_RATIO = 0.18
-const MAX_CROP_AREA_RATIO = 0.9
-const CROP_PADDING = 40
-const HASH_SIZE = 16
+const MAX_RECEIPT_EDGE = 1600
+const RECEIPT_JPEG_QUALITY = 0.82
+const ANALYSIS_MAX_EDGE = 1800
+const BACKGROUND_THRESHOLD = 34
+const MIN_CROP_AREA_RATIO = 0.2
+const MAX_CROP_AREA_RATIO = 0.98
+const CROP_PADDING = 24
 
 function loadImageElement(file) {
   return new Promise((resolve, reject) => {
@@ -80,13 +79,12 @@ function detectReceiptBounds(canvas) {
   const { width, height } = canvas
   const { data } = context.getImageData(0, 0, width, height)
   const background = sampleBackgroundColor(data, width, height)
-  const step = Math.max(1, Math.floor(Math.max(width, height) / 420))
+  const step = Math.max(1, Math.floor(Math.max(width, height) / 400))
 
   let minX = width
   let minY = height
   let maxX = -1
   let maxY = -1
-  let activePixels = 0
 
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
@@ -101,7 +99,6 @@ function detectReceiptBounds(canvas) {
       const distance = getColorDistance(red, green, blue, background)
       if (distance < BACKGROUND_THRESHOLD) continue
 
-      activePixels += 1
       minX = Math.min(minX, x)
       minY = Math.min(minY, y)
       maxX = Math.max(maxX, x)
@@ -109,7 +106,7 @@ function detectReceiptBounds(canvas) {
     }
   }
 
-  if (maxX < 0 || maxY < 0 || activePixels < 120) return null
+  if (maxX < 0 || maxY < 0) return null
 
   const left = Math.max(0, minX - CROP_PADDING)
   const top = Math.max(0, minY - CROP_PADDING)
@@ -118,101 +115,12 @@ function detectReceiptBounds(canvas) {
   const cropWidth = Math.max(1, right - left)
   const cropHeight = Math.max(1, bottom - top)
   const cropAreaRatio = (cropWidth * cropHeight) / (width * height)
-  const aspectRatio = cropHeight / cropWidth
 
   if (cropAreaRatio < MIN_CROP_AREA_RATIO || cropAreaRatio > MAX_CROP_AREA_RATIO) {
     return null
   }
 
-  if (aspectRatio < 0.85) return null
-
-  return { left, top, width: cropWidth, height: cropHeight, cropAreaRatio }
-}
-
-function buildImageFingerprint(canvas) {
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) return ''
-
-  const sampleCanvas = createCanvas(HASH_SIZE + 1, HASH_SIZE)
-  const sampleContext = sampleCanvas.getContext('2d', { alpha: false })
-  if (!sampleContext) return ''
-
-  sampleContext.drawImage(canvas, 0, 0, HASH_SIZE + 1, HASH_SIZE)
-  const { data } = sampleContext.getImageData(0, 0, HASH_SIZE + 1, HASH_SIZE)
-  let hash = ''
-
-  for (let y = 0; y < HASH_SIZE; y += 1) {
-    for (let x = 0; x < HASH_SIZE; x += 1) {
-      const leftOffset = getPixelOffset(x, y, HASH_SIZE + 1)
-      const rightOffset = getPixelOffset(x + 1, y, HASH_SIZE + 1)
-      const leftGray = data[leftOffset] + data[leftOffset + 1] + data[leftOffset + 2]
-      const rightGray = data[rightOffset] + data[rightOffset + 1] + data[rightOffset + 2]
-      hash += leftGray > rightGray ? '1' : '0'
-    }
-  }
-
-  return hash
-}
-
-function getHashDistance(a, b) {
-  if (!a || !b || a.length !== b.length) return Number.MAX_SAFE_INTEGER
-  let distance = 0
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) distance += 1
-  }
-  return distance
-}
-
-function enhanceReceiptCanvas(canvas) {
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) return
-
-  const { width, height } = canvas
-  const imageData = context.getImageData(0, 0, width, height)
-  const { data } = imageData
-
-  let minLuma = 255
-  let maxLuma = 0
-  let totalLuma = 0
-  let pixels = 0
-
-  for (let i = 0; i < data.length; i += 4) {
-    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
-    if (luma < minLuma) minLuma = luma
-    if (luma > maxLuma) maxLuma = luma
-    totalLuma += luma
-    pixels += 1
-  }
-
-  const averageLuma = pixels ? totalLuma / pixels : 255
-  const range = Math.max(1, maxLuma - minLuma)
-  const contrastBoost = range < 120 ? 1.28 : 1.16
-  const brightnessBoost = averageLuma < 200 ? 12 : 6
-  const whiteFloor = averageLuma > 210 ? 232 : 222
-  const darkCeiling = averageLuma < 170 ? 112 : 126
-
-  for (let i = 0; i < data.length; i += 4) {
-    const red = data[i]
-    const green = data[i + 1]
-    const blue = data[i + 2]
-    const luma = red * 0.299 + green * 0.587 + blue * 0.114
-    const normalized = ((luma - minLuma) / range) * 255
-    let boosted = normalized * contrastBoost + brightnessBoost
-
-    if (boosted >= whiteFloor) {
-      boosted = 255
-    } else if (boosted <= darkCeiling) {
-      boosted = Math.max(0, boosted * 0.72)
-    }
-
-    const sharpenMix = luma < 180 ? 0.96 : 0.82
-    const channel = Math.max(0, Math.min(255, boosted))
-    data[i] = Math.round(red * (1 - sharpenMix) + channel * sharpenMix)
-    data[i + 1] = Math.round(green * (1 - sharpenMix) + channel * sharpenMix)
-    data[i + 2] = Math.round(blue * (1 - sharpenMix) + channel * sharpenMix)
-  }
-
-  context.putImageData(imageData, 0, 0)
+  return { left, top, width: cropWidth, height: cropHeight }
 }
 
 function drawOptimizedReceipt(image) {
@@ -235,11 +143,7 @@ function drawOptimizedReceipt(image) {
   analysisContext.drawImage(image, 0, 0, analysisWidth, analysisHeight)
 
   const detectedBounds = detectReceiptBounds(analysisCanvas)
-  const safeBounds =
-    detectedBounds && detectedBounds.cropAreaRatio >= 0.22 && detectedBounds.cropAreaRatio <= 0.88
-      ? detectedBounds
-      : null
-  const sourceBounds = safeBounds || { left: 0, top: 0, width: analysisWidth, height: analysisHeight }
+  const sourceBounds = detectedBounds || { left: 0, top: 0, width: analysisWidth, height: analysisHeight }
   const cropScaleX = width / analysisWidth
   const cropScaleY = height / analysisHeight
 
@@ -249,8 +153,7 @@ function drawOptimizedReceipt(image) {
   const sourceHeight = Math.min(height - sourceTop, Math.round(sourceBounds.height * cropScaleY))
 
   const croppedMaxEdge = Math.max(sourceWidth, sourceHeight)
-  const targetEdge = safeBounds ? MAX_RECEIPT_EDGE : Math.max(MAX_RECEIPT_EDGE, 2400)
-  const outputScale = Math.min(1, targetEdge / croppedMaxEdge)
+  const outputScale = Math.min(1, MAX_RECEIPT_EDGE / croppedMaxEdge)
   const outputWidth = Math.max(1, Math.round(sourceWidth * outputScale))
   const outputHeight = Math.max(1, Math.round(sourceHeight * outputScale))
 
@@ -271,87 +174,30 @@ function drawOptimizedReceipt(image) {
     outputWidth,
     outputHeight,
   )
-  enhanceReceiptCanvas(outputCanvas)
 
-  return {
-    canvas: outputCanvas,
-    fingerprint: buildImageFingerprint(outputCanvas),
-    cropAreaRatio: sourceBounds.cropAreaRatio || 1,
-    likelyReceipt: Boolean(safeBounds || detectedBounds),
-  }
+  return outputCanvas
 }
 
 async function optimizeReceiptImage(file) {
-  if (typeof document === 'undefined') {
-    return { file, fingerprint: '', likelyReceipt: true, cropAreaRatio: 1 }
-  }
+  if (typeof document === 'undefined') return file
 
   const image = await loadImageElement(file)
-  const optimized = drawOptimizedReceipt(image)
-  if (!optimized) {
-    return { file, fingerprint: '', likelyReceipt: false, cropAreaRatio: 1 }
-  }
+  const canvas = drawOptimizedReceipt(image)
+  if (!canvas) return file
 
   const blob = await new Promise((resolve) => {
-    optimized.canvas.toBlob(resolve, 'image/jpeg', RECEIPT_JPEG_QUALITY)
+    canvas.toBlob(resolve, 'image/jpeg', RECEIPT_JPEG_QUALITY)
   })
 
-  if (!blob) {
-    return { file, fingerprint: optimized.fingerprint, likelyReceipt: optimized.likelyReceipt, cropAreaRatio: optimized.cropAreaRatio }
-  }
+  if (!blob) return file
+  if (blob.size >= file.size * 0.95 && file.type === 'image/jpeg') return file
 
-  const nextFile =
-    blob.size >= file.size * 0.95 && file.type === 'image/jpeg'
-      ? file
-      : new File([blob], file.name.replace(/\.[^.]+$/, '.jpg') || 'receipt.jpg', {
-          type: 'image/jpeg',
-          lastModified: file.lastModified,
-        })
-
-  return {
-    file: nextFile,
-    fingerprint: optimized.fingerprint,
-    likelyReceipt: optimized.likelyReceipt,
-    cropAreaRatio: optimized.cropAreaRatio,
-  }
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg') || 'receipt.jpg', {
+    type: 'image/jpeg',
+    lastModified: file.lastModified,
+  })
 }
 
-export async function prepareReceiptUploads(files) {
-  const prepared = []
-  const skipped = []
-  const seenFingerprints = []
-
-  for (const file of files || []) {
-    let optimized
-
-    try {
-      optimized = await optimizeReceiptImage(file)
-    } catch {
-      optimized = { file, fingerprint: '', likelyReceipt: false, cropAreaRatio: 1 }
-    }
-
-    const fingerprint = optimized.fingerprint || `${file.name}-${file.size}-${file.lastModified}`
-    const duplicate = seenFingerprints.some(
-      (item) => getHashDistance(item.fingerprint, fingerprint) <= 12,
-    )
-
-    if (duplicate) {
-      skipped.push({ file, reason: '중복 사진으로 판단되어 제외됨' })
-      continue
-    }
-
-    seenFingerprints.push({ fingerprint })
-    prepared.push({
-      originalFile: file,
-      optimizedFile: optimized.file || file,
-      fingerprint,
-      cropAreaRatio: optimized.cropAreaRatio || 1,
-      needsVisionFallback: !optimized.likelyReceipt,
-    })
-  }
-
-  return { prepared, skipped }
-}
 export async function fileToBase64(file) {
   const arrayBuffer = await file.arrayBuffer()
   let binary = ''
@@ -378,7 +224,8 @@ export function normalizeAutoFilledItems(parsedItems) {
 }
 
 export async function parseReceiptImage(file) {
-  const imageBase64 = await fileToBase64(file)
+  const optimizedFile = await optimizeReceiptImage(file)
+  const imageBase64 = await fileToBase64(optimizedFile)
 
   const response = await fetch(RECEIPT_API_URL, {
     method: 'POST',
@@ -387,7 +234,7 @@ export async function parseReceiptImage(file) {
     },
     body: JSON.stringify({
       imageBase64,
-      mimeType: file.type || 'image/jpeg',
+      mimeType: optimizedFile.type || file.type || 'image/jpeg',
       fileName: file.name || 'receipt.jpg',
     }),
   })
