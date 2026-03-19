@@ -163,6 +163,44 @@ function getHashDistance(a, b) {
   return distance
 }
 
+function enhanceReceiptCanvas(canvas) {
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return
+
+  const { width, height } = canvas
+  const imageData = context.getImageData(0, 0, width, height)
+  const { data } = imageData
+
+  let minLuma = 255
+  let maxLuma = 0
+
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+    if (luma < minLuma) minLuma = luma
+    if (luma > maxLuma) maxLuma = luma
+  }
+
+  const range = Math.max(1, maxLuma - minLuma)
+  const contrastBoost = range < 110 ? 1.16 : 1.08
+  const brightnessBoost = range < 110 ? 10 : 4
+
+  for (let i = 0; i < data.length; i += 4) {
+    const red = data[i]
+    const green = data[i + 1]
+    const blue = data[i + 2]
+    const luma = red * 0.299 + green * 0.587 + blue * 0.114
+    const normalized = ((luma - minLuma) / range) * 255
+    const boosted = Math.max(0, Math.min(255, normalized * contrastBoost + brightnessBoost))
+    const mix = luma < 210 ? 0.9 : 0.72
+
+    data[i] = Math.round(red * (1 - mix) + boosted * mix)
+    data[i + 1] = Math.round(green * (1 - mix) + boosted * mix)
+    data[i + 2] = Math.round(blue * (1 - mix) + boosted * mix)
+  }
+
+  context.putImageData(imageData, 0, 0)
+}
+
 function drawOptimizedReceipt(image) {
   const width = image.naturalWidth || image.width
   const height = image.naturalHeight || image.height
@@ -219,6 +257,7 @@ function drawOptimizedReceipt(image) {
     outputWidth,
     outputHeight,
   )
+  enhanceReceiptCanvas(outputCanvas)
 
   return {
     canvas: outputCanvas,

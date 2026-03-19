@@ -117,6 +117,19 @@ function extractPlainText(payload) {
     .trim()
 }
 
+function normalizeOcrText(text) {
+  return String(text || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[|｜]/g, '1')
+    .replace(/[•·]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/ ?\/ ?/g, ' / ')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
@@ -208,7 +221,7 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
             {
               type: 'input_text',
               text:
-                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, plus-option rows, prices, dates, totals, and labels. No explanation.',
+                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, option rows, prices, dates, totals, and labels. Keep item names readable and keep each visible receipt row on its own line when possible. No explanation.',
             },
           ],
         },
@@ -342,7 +355,7 @@ export async function onRequestPost(context) {
 
     try {
       const ocrPayload = await requestOcrText(env, { imageBase64, mimeType, fileName })
-      ocrText = extractPlainText(ocrPayload)
+      ocrText = normalizeOcrText(extractPlainText(ocrPayload))
       const { parsed: ruleBased, sourceParse } = buildRuleBasedResult(ocrText)
 
       if (isRuleBasedResultStrong(ruleBased, sourceParse)) {
