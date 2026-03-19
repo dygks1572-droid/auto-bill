@@ -117,6 +117,47 @@ function extractPlainText(payload) {
     .trim()
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function scoreParsedReceipt(parsed, stage = 'vision') {
+  const items = Array.isArray(parsed?.items) ? parsed.items : []
+  const baseItems = items.filter((item) => !item?.isOption)
+  const optionItems = items.filter((item) => item?.isOption)
+
+  let score = stage === 'vision' ? 0.72 : 0.7
+
+  if (typeof parsed?.orderTotal === 'number' && parsed.orderTotal > 0) score += 0.08
+  if (baseItems.length >= 1) score += 0.06
+  if (baseItems.length >= 2) score += 0.05
+  if (items.some((item) => Number(item?.amount || 0) > 0)) score += 0.04
+  if (optionItems.length >= 1) score += 0.04
+  if (parsed?.orderedDate) score += 0.03
+  if (parsed?.source && parsed.source !== '알 수 없음') score += 0.03
+  if (parsed?.documentType && parsed.documentType !== '알 수 없음') score += 0.02
+  if (parsed?.totalLabel) score += 0.02
+
+  return clamp(Number(score.toFixed(2)), 0.58, 0.94)
+}
+
+function isRuleBasedResultStrong(parsed, sourceParse) {
+  if (!parsed) return false
+
+  const items = Array.isArray(parsed.items) ? parsed.items : []
+  const baseItems = items.filter((item) => !item.isOption)
+  const candidateLines = Array.isArray(sourceParse?.candidateLines) ? sourceParse.candidateLines : []
+  const coverage = candidateLines.length ? items.length / candidateLines.length : 0
+  const confidence = scoreParsedReceipt(parsed, 'rule')
+
+  if (typeof parsed.orderTotal !== 'number' || parsed.orderTotal <= 0) return false
+  if (baseItems.length === 0) return false
+  if (confidence < 0.8) return false
+  if (candidateLines.length >= 3 && coverage < 0.34) return false
+
+  return true
+}
+
 function buildRuleBasedResult(ocrText) {
   const parsed = parseReceiptText(ocrText)
   const hasTotal = typeof parsed.orderTotal === 'number' && parsed.orderTotal > 0
@@ -133,10 +174,10 @@ function buildRuleBasedResult(ocrText) {
   const baseItems = items.filter((item) => !item.isOption)
 
   if (!hasTotal || baseItems.length === 0) {
-    return null
+    return { parsed: null, sourceParse: parsed }
   }
 
-  return {
+  const result = {
     source: OCR_SOURCE_MAP[parsed.source] || '알 수 없음',
     documentType: OCR_DOCUMENT_MAP[parsed.patternId] || '알 수 없음',
     orderedDate: parsed.orderedDate || null,
@@ -144,8 +185,11 @@ function buildRuleBasedResult(ocrText) {
     orderTotal: parsed.orderTotal,
     items,
     notes: [`rule-parser:${parsed.patternId}`],
-    confidence: 0.62,
+    confidence: 0,
   }
+
+  result.confidence = scoreParsedReceipt(result, 'rule')
+  return { parsed: result, sourceParse: parsed }
 }
 
 async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
@@ -164,7 +208,7 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
             {
               type: 'input_text',
               text:
-                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, prices, plus-option rows, and labels. No explanation.',
+                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, plus-option rows, prices, dates, totals, and labels. No explanation.',
             },
           ],
         },
@@ -180,7 +224,7 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
           ],
         },
       ],
-      max_output_tokens: 1200,
+      max_output_tokens: 1400,
     }),
   })
 
@@ -191,12 +235,13 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
   return response.json()
 }
 
-async function requestStructuredParse(env, { imageBase64, mimeType, fileName }) {
+async function requestStructuredParse(env, { imageBase64, mimeType, fileName, ocrText = '' }) {
   const developerPrompt = [
     'Extract only visible data from a Korean cafe or bakery receipt.',
     'Detect source, documentType, orderedDate, totalLabel, orderTotal, item rows, notes, confidence.',
     'Common layouts: Coupang Eats short slip, Baemin long receipt, pickup slip, store POS.',
     'Prefer total labels in this order: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
+    'Use the OCR lines as hints, but verify against the image before deciding.',
     'Do not add unreadable or missing text.',
     'Include product rows and option rows.',
     'Rows starting with + or ㄴ are options with isOption=true.',
@@ -206,7 +251,20 @@ async function requestStructuredParse(env, { imageBase64, mimeType, fileName }) 
     'orderedDate must be YYYY-MM-DD or null.',
   ].join(' ')
 
-  const userPrompt = `Analyze receipt image ${fileName} and return the schema only.`
+  const userContent = [{ type: 'input_text', text: `Analyze receipt image ${fileName} and return the schema only.` }]
+
+  if (ocrText.trim()) {
+    userContent.push({
+      type: 'input_text',
+      text: `OCR lines for cross-check:\n${ocrText.trim().slice(0, 4000)}`,
+    })
+  }
+
+  userContent.push({
+    type: 'input_image',
+    detail: env.OPENAI_IMAGE_DETAIL || 'auto',
+    image_url: `data:${mimeType};base64,${imageBase64}`,
+  })
 
   const openaiResponse = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -223,14 +281,7 @@ async function requestStructuredParse(env, { imageBase64, mimeType, fileName }) 
         },
         {
           role: 'user',
-          content: [
-            { type: 'input_text', text: userPrompt },
-            {
-              type: 'input_image',
-              detail: env.OPENAI_IMAGE_DETAIL || 'auto',
-              image_url: `data:${mimeType};base64,${imageBase64}`,
-            },
-          ],
+          content: userContent,
         },
       ],
       text: {
@@ -248,6 +299,22 @@ async function requestStructuredParse(env, { imageBase64, mimeType, fileName }) 
   }
 
   return openaiResponse.json()
+}
+
+function normalizeParsedResult(parsed, stage) {
+  const normalized = {
+    source: parsed?.source || '알 수 없음',
+    documentType: parsed?.documentType || '알 수 없음',
+    orderedDate: parsed?.orderedDate || null,
+    totalLabel: parsed?.totalLabel || null,
+    orderTotal: typeof parsed?.orderTotal === 'number' ? parsed.orderTotal : null,
+    items: Array.isArray(parsed?.items) ? parsed.items : [],
+    notes: Array.isArray(parsed?.notes) ? parsed.notes.filter(Boolean) : [],
+    confidence: typeof parsed?.confidence === 'number' ? parsed.confidence : 0,
+  }
+
+  normalized.confidence = Math.max(normalized.confidence, scoreParsedReceipt(normalized, stage))
+  return normalized
 }
 
 export async function onRequestOptions() {
@@ -271,19 +338,21 @@ export async function onRequestPost(context) {
       return json({ error: 'imageBase64 is required' }, 400)
     }
 
+    let ocrText = ''
+
     try {
       const ocrPayload = await requestOcrText(env, { imageBase64, mimeType, fileName })
-      const ocrText = extractPlainText(ocrPayload)
-      const ruleBased = buildRuleBasedResult(ocrText)
+      ocrText = extractPlainText(ocrPayload)
+      const { parsed: ruleBased, sourceParse } = buildRuleBasedResult(ocrText)
 
-      if (ruleBased) {
-        return json({ ok: true, parsed: ruleBased, stage: 'rule-parser' })
+      if (isRuleBasedResultStrong(ruleBased, sourceParse)) {
+        return json({ ok: true, parsed: normalizeParsedResult(ruleBased, 'rule'), stage: 'rule-parser' })
       }
     } catch (error) {
       console.warn('Rule-first OCR parse failed. Falling back to structured vision parse.', error)
     }
 
-    const payload = await requestStructuredParse(env, { imageBase64, mimeType, fileName })
+    const payload = await requestStructuredParse(env, { imageBase64, mimeType, fileName, ocrText })
     const text = extractStructuredText(payload)
 
     let parsed
@@ -293,7 +362,7 @@ export async function onRequestPost(context) {
       return json({ error: 'Failed to parse structured output', raw: payload }, 500)
     }
 
-    return json({ ok: true, parsed, stage: 'vision-schema' })
+    return json({ ok: true, parsed: normalizeParsedResult(parsed, 'vision'), stage: 'vision-schema' })
   } catch (error) {
     return json({ error: error?.message || 'Unknown server error' }, 500)
   }
