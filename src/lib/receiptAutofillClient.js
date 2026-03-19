@@ -4,6 +4,8 @@ const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-rece
 const MAX_RECEIPT_EDGE = 2100
 const RECEIPT_JPEG_QUALITY = 0.9
 const ANALYSIS_MAX_EDGE = 2200
+const ANDROID_MAX_RECEIPT_EDGE = 2600
+const ANDROID_RECEIPT_JPEG_QUALITY = 0.96
 const BACKGROUND_THRESHOLD = 30
 const MIN_CROP_AREA_RATIO = 0.2
 const MAX_CROP_AREA_RATIO = 0.98
@@ -33,6 +35,11 @@ function createCanvas(width, height) {
   canvas.width = width
   canvas.height = height
   return canvas
+}
+
+function isAndroidDevice() {
+  if (typeof navigator === 'undefined') return false
+  return /Android/i.test(navigator.userAgent || '')
 }
 
 function getPixelOffset(x, y, width) {
@@ -161,6 +168,28 @@ function enhanceReceiptCanvas(canvas) {
   context.putImageData(imageData, 0, 0)
 }
 
+function drawAndroidReceipt(image) {
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  const maxEdge = Math.max(width, height)
+
+  if (!maxEdge) return null
+
+  const outputScale = Math.min(1, ANDROID_MAX_RECEIPT_EDGE / maxEdge)
+  const outputWidth = Math.max(1, Math.round(width * outputScale))
+  const outputHeight = Math.max(1, Math.round(height * outputScale))
+
+  const outputCanvas = createCanvas(outputWidth, outputHeight)
+  const outputContext = outputCanvas.getContext('2d', { alpha: false })
+  if (!outputContext) return null
+
+  outputContext.fillStyle = '#ffffff'
+  outputContext.fillRect(0, 0, outputWidth, outputHeight)
+  outputContext.drawImage(image, 0, 0, outputWidth, outputHeight)
+
+  return outputCanvas
+}
+
 function drawOptimizedReceipt(image) {
   const width = image.naturalWidth || image.width
   const height = image.naturalHeight || image.height
@@ -221,14 +250,15 @@ async function optimizeReceiptImage(file) {
   if (typeof document === 'undefined') return file
 
   const image = await loadImageElement(file)
-  const canvas = drawOptimizedReceipt(image)
+  const canvas = isAndroidDevice() ? drawAndroidReceipt(image) : drawOptimizedReceipt(image)
   if (!canvas) return file
 
   const blob = await new Promise((resolve) => {
-    canvas.toBlob(resolve, 'image/jpeg', RECEIPT_JPEG_QUALITY)
+    canvas.toBlob(resolve, 'image/jpeg', isAndroidDevice() ? ANDROID_RECEIPT_JPEG_QUALITY : RECEIPT_JPEG_QUALITY)
   })
 
   if (!blob) return file
+  if (isAndroidDevice() && file.type.startsWith('image/')) return file
   if (blob.size >= file.size * 0.95 && file.type === 'image/jpeg') return file
 
   return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg') || 'receipt.jpg', {
