@@ -85,4 +85,3 @@ OPENAI_IMAGE_DETAIL=high
 - `gpt-4o-mini`: 비용 기준 비교용
 - `gpt-4.1`: 품질/이미지 토큰 효율 비교용
 
-OpenAI Platform에서 수동 테스트할 때는 [docs/openai-platform-receipt-prompt.md](/home/user/bill/docs/openai-platform-receipt-prompt.md)를 그대로 복사해서 쓰면 됩니다.
