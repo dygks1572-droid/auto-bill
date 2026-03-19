@@ -1,6 +1,202 @@
 import { buildBakeryComputation } from './bakeryMatcher'
 
 const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-receipt'
+const MAX_RECEIPT_EDGE = 1600
+const RECEIPT_JPEG_QUALITY = 0.82
+const ANALYSIS_MAX_EDGE = 1800
+const BACKGROUND_THRESHOLD = 34
+const MIN_CROP_AREA_RATIO = 0.2
+const MAX_CROP_AREA_RATIO = 0.98
+const CROP_PADDING = 24
+
+function loadImageElement(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(image)
+    }
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('이미지 로드 실패'))
+    }
+
+    image.src = objectUrl
+  })
+}
+
+function createCanvas(width, height) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  return canvas
+}
+
+function getPixelOffset(x, y, width) {
+  return (y * width + x) * 4
+}
+
+function sampleBackgroundColor(data, width, height) {
+  const corners = [
+    [0, 0],
+    [width - 1, 0],
+    [0, height - 1],
+    [width - 1, height - 1],
+  ]
+
+  let red = 0
+  let green = 0
+  let blue = 0
+
+  for (const [x, y] of corners) {
+    const offset = getPixelOffset(x, y, width)
+    red += data[offset]
+    green += data[offset + 1]
+    blue += data[offset + 2]
+  }
+
+  return {
+    red: red / corners.length,
+    green: green / corners.length,
+    blue: blue / corners.length,
+  }
+}
+
+function getColorDistance(red, green, blue, target) {
+  const dr = red - target.red
+  const dg = green - target.green
+  const db = blue - target.blue
+  return Math.sqrt(dr * dr + dg * dg + db * db)
+}
+
+function detectReceiptBounds(canvas) {
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return null
+
+  const { width, height } = canvas
+  const { data } = context.getImageData(0, 0, width, height)
+  const background = sampleBackgroundColor(data, width, height)
+  const step = Math.max(1, Math.floor(Math.max(width, height) / 400))
+
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const offset = getPixelOffset(x, y, width)
+      const red = data[offset]
+      const green = data[offset + 1]
+      const blue = data[offset + 2]
+      const alpha = data[offset + 3]
+
+      if (alpha < 10) continue
+
+      const distance = getColorDistance(red, green, blue, background)
+      if (distance < BACKGROUND_THRESHOLD) continue
+
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+
+  if (maxX < 0 || maxY < 0) return null
+
+  const left = Math.max(0, minX - CROP_PADDING)
+  const top = Math.max(0, minY - CROP_PADDING)
+  const right = Math.min(width, maxX + CROP_PADDING)
+  const bottom = Math.min(height, maxY + CROP_PADDING)
+  const cropWidth = Math.max(1, right - left)
+  const cropHeight = Math.max(1, bottom - top)
+  const cropAreaRatio = (cropWidth * cropHeight) / (width * height)
+
+  if (cropAreaRatio < MIN_CROP_AREA_RATIO || cropAreaRatio > MAX_CROP_AREA_RATIO) {
+    return null
+  }
+
+  return { left, top, width: cropWidth, height: cropHeight }
+}
+
+function drawOptimizedReceipt(image) {
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  const maxEdge = Math.max(width, height)
+
+  if (!maxEdge) return null
+
+  const analysisScale = Math.min(1, ANALYSIS_MAX_EDGE / maxEdge)
+  const analysisWidth = Math.max(1, Math.round(width * analysisScale))
+  const analysisHeight = Math.max(1, Math.round(height * analysisScale))
+
+  const analysisCanvas = createCanvas(analysisWidth, analysisHeight)
+  const analysisContext = analysisCanvas.getContext('2d', { alpha: false })
+  if (!analysisContext) return null
+
+  analysisContext.fillStyle = '#ffffff'
+  analysisContext.fillRect(0, 0, analysisWidth, analysisHeight)
+  analysisContext.drawImage(image, 0, 0, analysisWidth, analysisHeight)
+
+  const detectedBounds = detectReceiptBounds(analysisCanvas)
+  const sourceBounds = detectedBounds || { left: 0, top: 0, width: analysisWidth, height: analysisHeight }
+  const cropScaleX = width / analysisWidth
+  const cropScaleY = height / analysisHeight
+
+  const sourceLeft = Math.max(0, Math.round(sourceBounds.left * cropScaleX))
+  const sourceTop = Math.max(0, Math.round(sourceBounds.top * cropScaleY))
+  const sourceWidth = Math.min(width - sourceLeft, Math.round(sourceBounds.width * cropScaleX))
+  const sourceHeight = Math.min(height - sourceTop, Math.round(sourceBounds.height * cropScaleY))
+
+  const croppedMaxEdge = Math.max(sourceWidth, sourceHeight)
+  const outputScale = Math.min(1, MAX_RECEIPT_EDGE / croppedMaxEdge)
+  const outputWidth = Math.max(1, Math.round(sourceWidth * outputScale))
+  const outputHeight = Math.max(1, Math.round(sourceHeight * outputScale))
+
+  const outputCanvas = createCanvas(outputWidth, outputHeight)
+  const outputContext = outputCanvas.getContext('2d', { alpha: false })
+  if (!outputContext) return null
+
+  outputContext.fillStyle = '#ffffff'
+  outputContext.fillRect(0, 0, outputWidth, outputHeight)
+  outputContext.drawImage(
+    image,
+    sourceLeft,
+    sourceTop,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    outputWidth,
+    outputHeight,
+  )
+
+  return outputCanvas
+}
+
+async function optimizeReceiptImage(file) {
+  if (typeof document === 'undefined') return file
+
+  const image = await loadImageElement(file)
+  const canvas = drawOptimizedReceipt(image)
+  if (!canvas) return file
+
+  const blob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', RECEIPT_JPEG_QUALITY)
+  })
+
+  if (!blob) return file
+  if (blob.size >= file.size * 0.95 && file.type === 'image/jpeg') return file
+
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg') || 'receipt.jpg', {
+    type: 'image/jpeg',
+    lastModified: file.lastModified,
+  })
+}
 
 export async function fileToBase64(file) {
   const arrayBuffer = await file.arrayBuffer()
@@ -28,7 +224,8 @@ export function normalizeAutoFilledItems(parsedItems) {
 }
 
 export async function parseReceiptImage(file) {
-  const imageBase64 = await fileToBase64(file)
+  const optimizedFile = await optimizeReceiptImage(file)
+  const imageBase64 = await fileToBase64(optimizedFile)
 
   const response = await fetch(RECEIPT_API_URL, {
     method: 'POST',
@@ -37,7 +234,7 @@ export async function parseReceiptImage(file) {
     },
     body: JSON.stringify({
       imageBase64,
-      mimeType: file.type || 'image/jpeg',
+      mimeType: optimizedFile.type || file.type || 'image/jpeg',
       fileName: file.name || 'receipt.jpg',
     }),
   })

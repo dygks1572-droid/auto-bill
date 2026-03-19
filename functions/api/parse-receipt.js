@@ -98,11 +98,7 @@ export async function onRequestPost(context) {
   try {
     const { request, env } = context
     const body = await request.json()
-    const {
-      imageBase64,
-      mimeType = 'image/jpeg',
-      fileName = 'receipt.jpg',
-    } = body || {}
+    const { imageBase64, mimeType = 'image/jpeg', fileName = 'receipt.jpg' } = body || {}
 
     if (!env.OPENAI_API_KEY) {
       return json({ error: 'OPENAI_API_KEY is missing' }, 500)
@@ -113,30 +109,19 @@ export async function onRequestPost(context) {
     }
 
     const developerPrompt = [
-      'Extract order totals and itemized lines from Korean cafe and bakery receipts.',
-      'These receipts commonly follow repeating patterns.',
-      '1) Coupang Eats short slips with [매장용] and a 주문금액 label.',
-      '2) Baemin long receipts with 알뜰 한집배달, 주문금액, 총 결제금액, and delivery fee sections.',
-      '3) Pickup slips with 픽업번호, 포장주문, and 합계 labels.',
-      '4) Store POS receipts with 매출합계(카드) or 결제금액 labels.',
-      'Return only information that is visibly present.',
-      'For totals, prioritize explicit labels in this order: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
-      'Do not include delivery fee in orderTotal unless the receipt explicitly includes it in the total label.',
-      'For line items, include both product rows and option rows.',
-      'Rows starting with + or ㄴ are options and must have isOption=true.',
-      'Keep optionCharge at 0 for zero-cost options.',
-      'If an option has a positive extra fee, preserve that value in optionCharge.',
-      'Do not hallucinate unreadable text.',
-      'Use qty=1 if quantity is not clearly visible.',
-      'orderedDate must be YYYY-MM-DD if present, otherwise null.',
+      'Extract only visible data from a Korean cafe or bakery receipt.',
+      'Detect source, documentType, orderedDate, totalLabel, orderTotal, item rows, notes, confidence.',
+      'Common layouts: Coupang Eats short slip, Baemin long receipt, pickup slip, store POS.',
+      'Prefer total labels in this order: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
+      'Do not add unreadable or missing text.',
+      'Include product rows and option rows.',
+      'Rows starting with + or ㄴ are options with isOption=true.',
+      'Use qty=1 when quantity is unclear.',
+      'Do not include delivery fee unless the chosen total label includes it.',
+      'orderedDate must be YYYY-MM-DD or null.',
     ].join(' ')
 
-    const userPrompt = [
-      `Analyze this receipt image (${fileName}).`,
-      'Extract source, document type, ordered date, total label, order total, item rows, notes, and confidence.',
-      'Important bakery examples include 에그타르트, 레몬케이크, 휘낭시에, 마늘빵, 소금빵, 카야버터 소금빵, 블루베리 식빵, 베이커리 츄러스, 앙버터.',
-      'Important non-bakery examples include 아메리카노, 라떼, 비건라떼, 마다가스카르 바닐라빈 라떼, 콜드브루 원액 1L, 커피원두 (오랑 400g), 이즈드립, 샌드위치.',
-    ].join(' ')
+    const userPrompt = `Analyze receipt image ${fileName} and return the schema only.`
 
     const openaiResponse = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -157,7 +142,7 @@ export async function onRequestPost(context) {
               { type: 'input_text', text: userPrompt },
               {
                 type: 'input_image',
-                detail: 'high',
+                detail: env.OPENAI_IMAGE_DETAIL || 'auto',
                 image_url: `data:${mimeType};base64,${imageBase64}`,
               },
             ],
