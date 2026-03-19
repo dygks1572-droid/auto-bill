@@ -316,6 +316,32 @@ export async function parseReceiptImage(file) {
   return data.parsed
 }
 
+function flattenComputedItems(rows) {
+  const flattened = []
+
+  for (const row of rows || []) {
+    flattened.push({
+      name: row.name,
+      qty: row.qty,
+      amount: row.amount,
+      isOption: !!row.isOption,
+      optionCharge: Number(row.optionCharge || 0),
+    })
+
+    for (const option of row.options || []) {
+      flattened.push({
+        name: option.name,
+        qty: option.qty,
+        amount: option.amount,
+        isOption: true,
+        optionCharge: Number(option.optionCharge || 0),
+      })
+    }
+  }
+
+  return flattened
+}
+
 export function buildAutofillStateFromParsed(parsed, products) {
   const items = normalizeAutoFilledItems(parsed?.items)
   const bakery = buildBakeryComputation(items, products)
@@ -324,13 +350,7 @@ export function buildAutofillStateFromParsed(parsed, products) {
     source: parsed?.source || 'manual',
     orderedDate: parsed?.orderedDate || '',
     orderTotal: parsed?.orderTotal || 0,
-    items: bakery.items.map((row) => ({
-      name: row.name,
-      qty: row.qty,
-      amount: row.amount,
-      isOption: !!row.isOption,
-      optionCharge: Number(row.optionCharge || 0),
-    })),
+    items: flattenComputedItems(bakery.items),
     bakeryTotal: bakery.bakeryTotal,
     bakeryBreakdown: bakery.bakeryBreakdown,
     note: '',

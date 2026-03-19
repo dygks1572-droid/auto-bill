@@ -13,7 +13,7 @@ function todayString() {
 }
 
 function emptyItem() {
-  return { name: '', qty: 1, amount: '' }
+  return { name: '', qty: 1, amount: '', isOption: false, optionCharge: 0 }
 }
 
 function createUploadEntry(file, index) {
@@ -512,7 +512,9 @@ export default function UploadPage() {
                               </div>
 
                               <div className="itemMatch">
-                                {matched?.isBakery ? (
+                                {matched?.isOption || item.isOption ? (
+                                  <span className="tag normal">옵션 행 인식</span>
+                                ) : matched?.isBakery ? (
                                   <span className="tag bakery">베이커리 매칭: {matched.matchedBakeryName}</span>
                                 ) : matched?.suggestions?.length ? (
                                   <span className="tag normal">자동 매칭 실패</span>
@@ -521,7 +523,7 @@ export default function UploadPage() {
                                 )}
                               </div>
 
-                              {matched?.suggestions?.length && !matched?.isBakery ? (
+                              {matched?.suggestions?.length && !matched?.isBakery && !matched?.isOption && !item.isOption ? (
                                 <div className="suggestionGroup">
                                   <p className="suggestionLabel">추천 후보</p>
                                   <div className="suggestionChips">
