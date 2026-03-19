@@ -215,6 +215,10 @@ const BASE_PRODUCT_SEEDS = [
   product('호두 크랜베리 깜빠뉴', {
     aliases: [
       '호두크랜베리깜빠뉴',
+      '호두 그래백리 깜빠뉴',
+      '호두그래백리깜빠뉴',
+      '호두 그래백리 깜파뉴',
+      '호두그래백리깜파뉴',
       '호두 크랜베리 캄파뉴',
       '호두크랜베리캄파뉴',
       '호두 크렌베리 깜빠뉴',
@@ -265,6 +269,7 @@ const BASE_PRODUCT_SEEDS = [
     countInBakeryTotal: false,
   }),
   product('이즈드립', {
+    aliases: ['이즈드랍', '이지드립', '이즈 드립'],
     category: 'drink',
     group: 'coffee',
     countInBakeryTotal: false,
@@ -312,6 +317,9 @@ const BASE_PRODUCT_SEEDS = [
   }),
   product('잠봉뵈르 샌드위치', {
     aliases: [
+      '볼빈 스딩워치',
+      '볼빈스딩워치',
+      '볼빈 샌드위치',
       '잠봉뵈르',
       '잠봉뵈르샌드위치',
       '잠봉뵈르샌드',
