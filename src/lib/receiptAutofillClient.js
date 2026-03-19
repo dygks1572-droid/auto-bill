@@ -328,6 +328,8 @@ export function buildAutofillStateFromParsed(parsed, products) {
       name: row.name,
       qty: row.qty,
       amount: row.amount,
+      isOption: !!row.isOption,
+      optionCharge: Number(row.optionCharge || 0),
     })),
     bakeryTotal: bakery.bakeryTotal,
     bakeryBreakdown: bakery.bakeryBreakdown,

@@ -38,14 +38,27 @@ const OCR_NAME_CORRECTIONS = [
       /^호두.*빔밥$/,
       /^호두그래백리깜빠뉴$/,
       /^호두그래백리깜파뉴$/,
+      /^호두그래배리깜빠뉴$/,
+      /^호두그래배리깜파뉴$/,
+      /^홍두그래백리깜빠뉴$/,
+      /^홍두그래백리깜파뉴$/,
+      /^호두그래백리캄파뉴$/,
+      /^호두그래백리깜빠뉘$/,
       /^호두그래백리.*$/,
+      /^홍두그래백리.*$/,
+      /^호두그랜베리깜빠뉴$/,
+      /^호두그랜베리깜파뉴$/,
       /^호두크랜베리깜빠뉴$/,
+      /^홍두크랜베리깜빠뉴$/,
       /^호두크렌베리깜빠뉴$/,
+      /^호두크렌배리깜빠뉴$/,
       /^호두크랜배리깜빠뉴$/,
+      /^호두크래베리깜빠뉴$/,
       /^호두크랜베리캄파뉴$/,
       /^호두크랜베리깜파뉴$/,
       /^호두크랜베리깜빠뉘$/,
       /^호두크랜베리깜빠뉴.*$/,
+      /(?:홍두|호도|호두).*(?:그래백리|그래배리|그랜베리|크랜베리|크렌베리|크렌배리|크랜배리|크래베리).*(?:깜빠뉴|깜파뉴|캄파뉴|깜빠뉘)$/,
       /호두.*크랜.*깜빠뉴$/,
       /호두.*크랜.*캄파뉴$/,
       /크랜베리.*깜빠뉴$/,
@@ -75,8 +88,9 @@ function normalizeBakeryVariants(value) {
   return String(value ?? '')
     .replace(/잠봉\s*뵈르|잠봉뵈르|잠봉보에르|잠봉브외르|잠봉베르|잠봉뵈어/gi, '잠봉뵈르')
     .replace(/샌드윗치|샌드위치|샌드위티|샌드위/gi, '샌드위치')
-    .replace(/깜파뉴|캄파뉴|캄빠뉴|깜빠뉴/gi, '깜빠뉴')
-    .replace(/크랜배리|크렌베리|크렌배리/gi, '크랜베리')
+    .replace(/홍두|호도/gi, '호두')
+    .replace(/깜파뉴|캄파뉴|캄빠뉴|깜빠뉘|깜빠뉴/gi, '깜빠뉴')
+    .replace(/그래백리|그래배리|그랜베리|크랜배리|크렌베리|크렌배리|크래베리/gi, '크랜베리')
     .replace(/이즈드랍|이지드립|이즈 드립/gi, '이즈드립')
 }
 
@@ -250,6 +264,17 @@ function baseOptionName(rawName) {
     .replace(/\s+/g, ' ')
 }
 
+function extractOptionCharge(rawName, fallbackAmount = 0) {
+  const trimmed = String(rawName ?? '').trim()
+  const inlineMatch = trimmed.match(/(?:^|\s)\+?\s*(\d{1,4})(?:원)?(?:\s|$)/)
+  if (inlineMatch) {
+    const parsed = parseNumber(inlineMatch[1], fallbackAmount)
+    return parsed >= 0 ? parsed : fallbackAmount
+  }
+
+  return fallbackAmount
+}
+
 function isFinancierOptionLine(rawName) {
   const trimmed = String(rawName ?? '').trim()
   if (!trimmed) return false
@@ -261,8 +286,14 @@ function isFinancierOptionLine(rawName) {
   )
   const hasOptionPrice = /(?:^|\s)\+?\d{1,4}(?:원)?(?:\s|$)/.test(trimmed)
   const mentionsFinancier = /휘낭시에/.test(trimmed)
+  const looksLikeFinancierFlavor = /(?:플레인|무화과|약과|발로나초코|고르곤졸라\s*크림치즈)/.test(trimmed)
 
-  return hasOptionKeyword && (hasOptionPrice || mentionsFinancier)
+  return hasOptionKeyword && (hasOptionPrice || mentionsFinancier || looksLikeFinancierFlavor)
+}
+
+function isFinancierBaseItem(rawName, matchedName) {
+  const source = String(rawName || '') + ' ' + String(matchedName || '')
+  return /휘낭시에/.test(source)
 }
 
 export function isOptionLineName(rawName) {
@@ -272,7 +303,10 @@ export function isOptionLineName(rawName) {
   if (isFinancierOptionLine(trimmed)) return true
 
   const normalized = normalizeText(trimmed)
-  return OPTION_NAMES.some((name) => normalizeText(name) === normalized)
+  return OPTION_NAMES.some((name) => {
+    const normalizedOption = normalizeText(name)
+    return normalizedOption === normalized || normalized.endsWith(normalizedOption)
+  })
 }
 
 export function buildCatalogIndex(products = DEFAULT_PRODUCT_SEEDS) {
@@ -367,6 +401,7 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
   const countReviewNeeded = Boolean(config.countReviewNeeded)
   const resultItems = []
   let lastBaseItem = null
+  let lastFinancierItem = null
 
   for (const raw of rawItems || []) {
     const name = String(raw?.name ?? '').trim()
@@ -383,13 +418,15 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
       .filter((item) => item.score >= SUGGESTION_THRESHOLD)
       .slice(0, MAX_SUGGESTIONS)
     const financierOption = isFinancierOptionLine(lookupName)
-    const isOption = optionLine || financierOption || matched?.optionLike
+    const explicitOption = Boolean(raw?.isOption)
+    const isOption = explicitOption || optionLine || financierOption || matched?.optionLike
+    const optionCharge = parseNumber(raw?.optionCharge, extractOptionCharge(lookupName, amount))
 
     if (isOption) {
       const optionRow = {
         name,
         qty,
-        amount,
+        amount: optionCharge || amount,
         isOption: true,
         baseOptionName: baseOptionName(lookupName),
         matchedCatalogName: matched?.name || null,
@@ -397,15 +434,18 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
         category: matched?.category || 'option',
         countInBakeryTotal: false,
         correctedName: correctionTarget,
+        optionCharge,
         suggestions,
       }
 
-      if (lastBaseItem) {
-        lastBaseItem.options.push(optionRow)
-        if (amount > 0) {
-          lastBaseItem.optionCharge += amount
-          lastBaseItem.finalAmount += amount
-          lastBaseItem.amount = lastBaseItem.finalAmount
+      const optionOwner = financierOption && lastFinancierItem ? lastFinancierItem : lastBaseItem
+
+      if (optionOwner) {
+        optionOwner.options.push(optionRow)
+        if (optionCharge > 0) {
+          optionOwner.optionCharge += optionCharge
+          optionOwner.finalAmount += optionCharge
+          optionOwner.amount = optionOwner.finalAmount
         }
       } else {
         resultItems.push({
@@ -445,6 +485,7 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
 
     resultItems.push(row)
     lastBaseItem = row
+    lastFinancierItem = isFinancierBaseItem(name, matched?.name) ? row : lastFinancierItem
   }
 
   const bakeryBreakdownMap = new Map()

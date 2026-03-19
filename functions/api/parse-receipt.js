@@ -185,6 +185,8 @@ export async function onRequestPost(context) {
       'Rows starting with + or ㄴ are options with isOption=true.',
       'For financier options, treat rows like 플레인 +0, 무화과 +400원, 약과 +400원, 발로나초코 +800원, 고르곤졸라크림치즈 +600원 as option rows with isOption=true and optionCharge set to the surcharge.',
       'Also treat rows like +0 플레인, +400 무화과, +400 약과, +800 발로나초코, +600 고르곤졸라크림치즈 and 휘낭시에 플레인/무화과/약과/발로나초코/고르곤졸라크림치즈 as financier option rows when they appear under a financier item.',
+      'If a receipt shows 휘낭시에 as the base item and the flavor appears on the next line, return the base item row and a separate option row instead of merging them.',
+      'If an option surcharge is visible, copy it to optionCharge even when the option row amount is 0.',
       'Use qty=1 when quantity is unclear.',
       'Do not include delivery fee unless the chosen total includes it.',
       'orderedDate must be YYYY-MM-DD or null.',
