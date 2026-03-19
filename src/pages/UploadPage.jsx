@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReceiptsBatch, listenReceiptsByDate } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
 import { buildBakeryComputation, learnCatalogAlias } from '../lib/bakeryMatcher'
-import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
+import { buildAutofillStateFromParsed, parseReceiptImage, prepareReceiptUploads } from '../lib/receiptAutofillClient'
 
 function todayString() {
   const now = new Date()
@@ -16,10 +16,11 @@ function emptyItem() {
   return { name: '', qty: 1, amount: '' }
 }
 
-function createUploadEntry(file, index) {
+function createUploadEntry(file, index, analysisFile = file) {
   return {
     id: `${file.name}-${file.lastModified}-${index}`,
     file,
+    analysisFile,
     previewUrl: URL.createObjectURL(file),
     orderTotal: '',
     note: '',
@@ -101,7 +102,7 @@ export default function UploadPage() {
       patchUpload(current.id, (entry) => ({ ...entry, status: 'reading', error: '' }))
 
       try {
-        const parsed = await parseReceiptImage(current.file)
+        const parsed = await parseReceiptImage(current.analysisFile || current.file)
         const filled = buildAutofillStateFromParsed(parsed, products)
 
         patchUpload(current.id, (entry) => ({
@@ -133,22 +134,35 @@ export default function UploadPage() {
     setAutoReading(false)
   }
 
-  function handleFileChange(event) {
+  async function handleFileChange(event) {
     const nextFiles = Array.from(event.target.files || [])
 
-    setUploads((prev) => {
-      for (const entry of prev) {
-        URL.revokeObjectURL(entry.previewUrl)
-      }
-      return nextFiles.map((file, index) => createUploadEntry(file, index))
-    })
+    for (const entry of uploadsRef.current) {
+      URL.revokeObjectURL(entry.previewUrl)
+    }
 
     if (!nextFiles.length) {
+      setUploads([])
       setMessage('')
       return
     }
 
-    setMessage(`${nextFiles.length}장 선택됨. 분석 버튼을 눌러 진행하세요.`)
+    const { prepared, skipped } = await prepareReceiptUploads(nextFiles)
+    const nextUploads = prepared.map((entry, index) =>
+      createUploadEntry(entry.originalFile, index, entry.optimizedFile),
+    )
+
+    setUploads(nextUploads)
+
+    if (!nextUploads.length) {
+      setMessage(skipped[0]?.reason || '분석 가능한 영수증 사진이 없습니다.')
+      return
+    }
+
+    const skippedMessage = skipped.length
+      ? ` / 제외 ${skipped.length}장`
+      : ''
+    setMessage(`${nextUploads.length}장 선택됨${skippedMessage}. 분석 버튼을 눌러 진행하세요.`)
   }
 
   function updateItem(uploadId, itemIndex, field, value) {
