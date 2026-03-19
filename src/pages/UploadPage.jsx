@@ -85,15 +85,68 @@ export default function UploadPage() {
     setUploads((prev) => prev.map((entry) => (entry.id === id ? updater(entry) : entry)))
   }
 
-  function handleFileChange(event) {
+  async function processUploads(targetUploads) {
+    if (!targetUploads.length) return
+
+    setAutoReading(true)
+    setMessage(`사진 ${targetUploads.length}장 분석 중...`)
+
+    let successCount = 0
+
+    for (const current of targetUploads) {
+      patchUpload(current.id, (entry) => ({ ...entry, status: 'reading', error: '' }))
+
+      try {
+        const parsed = await parseReceiptImage(current.file)
+        const filled = buildAutofillStateFromParsed(parsed, products)
+
+        patchUpload(current.id, (entry) => ({
+          ...entry,
+          parsedReceipt: parsed,
+          orderTotal: filled.orderTotal ? String(filled.orderTotal) : entry.orderTotal,
+          note: filled.note || entry.note,
+          items: filled.items?.length ? filled.items : entry.items,
+          autoFilled: {
+            source: filled.source || 'manual',
+            orderedDate: filled.orderedDate || todayString(),
+            confidence: filled.confidence || 0,
+          },
+          status: 'done',
+          error: '',
+        }))
+        successCount += 1
+      } catch (error) {
+        patchUpload(current.id, (entry) => ({
+          ...entry,
+          parsedReceipt: null,
+          status: 'error',
+          error: error?.message || '자동 읽기 실패',
+        }))
+      }
+    }
+
+    setMessage(`자동 읽기 완료 ${successCount}/${targetUploads.length}`)
+    setAutoReading(false)
+  }
+
+  async function handleFileChange(event) {
     const nextFiles = Array.from(event.target.files || [])
+    let nextUploads = []
+
     setUploads((prev) => {
       for (const entry of prev) {
         URL.revokeObjectURL(entry.previewUrl)
       }
-      return nextFiles.map((file, index) => createUploadEntry(file, index))
+      nextUploads = nextFiles.map((file, index) => createUploadEntry(file, index))
+      return nextUploads
     })
-    setMessage(nextFiles.length ? `${nextFiles.length}장 선택됨` : '')
+
+    if (!nextUploads.length) {
+      setMessage('')
+      return
+    }
+
+    await processUploads(nextUploads)
   }
 
   function updateItem(uploadId, itemIndex, field, value) {
@@ -134,49 +187,6 @@ export default function UploadPage() {
     )
   }
 
-  async function handleAutoRead() {
-    if (!uploads.length) return
-    setAutoReading(true)
-    setMessage('')
-
-    let successCount = 0
-
-    for (const current of uploads) {
-      patchUpload(current.id, (entry) => ({ ...entry, status: 'reading', error: '' }))
-
-      try {
-        const parsed = await parseReceiptImage(current.file)
-        const filled = buildAutofillStateFromParsed(parsed, products)
-
-        patchUpload(current.id, (entry) => ({
-          ...entry,
-          parsedReceipt: parsed,
-          orderTotal: filled.orderTotal ? String(filled.orderTotal) : entry.orderTotal,
-          note: filled.note || entry.note,
-          items: filled.items?.length ? filled.items : entry.items,
-          autoFilled: {
-            source: filled.source || 'manual',
-            orderedDate: filled.orderedDate || todayString(),
-            confidence: filled.confidence || 0,
-          },
-          status: 'done',
-          error: '',
-        }))
-        successCount += 1
-      } catch (error) {
-        patchUpload(current.id, (entry) => ({
-          ...entry,
-          parsedReceipt: null,
-          status: 'error',
-          error: error?.message || '자동 읽기 실패',
-        }))
-      }
-    }
-
-    setMessage(`자동 읽기 완료 ${successCount}/${uploads.length}`)
-    setAutoReading(false)
-  }
-
   async function handleSubmit(event) {
     event.preventDefault()
     if (!uploads.length) return
@@ -197,6 +207,18 @@ export default function UploadPage() {
             bakeryTotal: computed.bakeryTotal,
             bakeryBreakdown: computed.bakeryBreakdown,
             items: computed.items,
+            analysis: entry.parsedReceipt
+              ? {
+                  source: entry.parsedReceipt.source || null,
+                  documentType: entry.parsedReceipt.documentType || null,
+                  orderedDate: entry.parsedReceipt.orderedDate || null,
+                  totalLabel: entry.parsedReceipt.totalLabel || null,
+                  orderTotal: entry.parsedReceipt.orderTotal ?? null,
+                  confidence: entry.parsedReceipt.confidence ?? null,
+                  notes: entry.parsedReceipt.notes || [],
+                  items: entry.parsedReceipt.items || [],
+                }
+              : null,
             note: entry.note,
           })
 
@@ -272,12 +294,8 @@ export default function UploadPage() {
         </div>
 
         <div className="batchActions">
-          <button type="button" onClick={handleAutoRead} disabled={!uploads.length || autoReading}>
-            {autoReading ? '자동 읽는 중...' : '선택한 사진 자동 읽기'}
-          </button>
-
-          <button type="submit" disabled={!uploads.length || saving}>
-            {saving ? '저장 중...' : `${totalSelected || 0}건 저장`}
+          <button type="submit" disabled={!uploads.length || saving || autoReading}>
+            {autoReading ? '분석 완료 대기 중...' : saving ? '저장 중...' : `${totalSelected || 0}건 저장`}
           </button>
         </div>
 
@@ -477,17 +495,23 @@ export default function UploadPage() {
             <ul className="receiptList">
               {savedRows.map((row) => (
                 <li key={row.id}>
-                  <div>
-                    <strong>{row.imageName || '사진 없음'}</strong>
-                    <span>{row.source}</span>
-                  </div>
-                  <div>
-                    주문금액 {Number(row.orderTotal || 0).toLocaleString()}원 / 베이커리{' '}
-                    {Number(row.bakeryTotal || 0).toLocaleString()}원
-                  </div>
-                </li>
-              ))}
-            </ul>
+                <div>
+                  <strong>{row.imageName || '사진 없음'}</strong>
+                  <span>{row.source}</span>
+                </div>
+                <div>
+                  주문금액 {Number(row.orderTotal || 0).toLocaleString()}원 / 베이커리{' '}
+                  {Number(row.bakeryTotal || 0).toLocaleString()}원
+                </div>
+                <div>
+                  문서유형 {row.analysis?.documentType || '-'} / 신뢰도{' '}
+                  {typeof row.analysis?.confidence === 'number'
+                    ? `${Math.round(row.analysis.confidence * 100)}%`
+                    : '-'}
+                </div>
+              </li>
+            ))}
+          </ul>
           )}
         </div>
       </form>

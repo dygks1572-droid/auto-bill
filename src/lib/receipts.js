@@ -38,6 +38,7 @@ export async function createReceipt(payload) {
     bakeryTotal: toNumber(payload.bakeryTotal),
     bakeryBreakdown: payload.bakeryBreakdown || [],
     items: payload.items || [],
+    analysis: payload.analysis || null,
     note: payload.note || '',
     createdAt: serverTimestamp(),
   })

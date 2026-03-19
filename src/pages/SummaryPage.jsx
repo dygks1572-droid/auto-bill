@@ -13,6 +13,21 @@ function formatWon(value) {
   return new Intl.NumberFormat('ko-KR').format(Number(value || 0))
 }
 
+function getReceiptAnalysis(row) {
+  if (row.analysis) return row.analysis
+
+  return {
+    source: row.source || null,
+    documentType: null,
+    orderedDate: row.orderedDate || null,
+    totalLabel: null,
+    orderTotal: row.orderTotal ?? null,
+    confidence: null,
+    notes: row.note ? [row.note] : [],
+    items: row.items || [],
+  }
+}
+
 export default function SummaryPage() {
   const [orderedDate, setOrderedDate] = useState(todayString())
   const [rows, setRows] = useState([])
@@ -115,6 +130,68 @@ export default function SummaryPage() {
                 <div>
                   업로드일 {row.uploadedDate || '-'} / 주문일 {row.orderedDate || '-'}
                 </div>
+                <details className="analysisDetails">
+                  <summary>분석 내용 보기</summary>
+                  {(() => {
+                    const analysis = getReceiptAnalysis(row)
+                    return (
+                      <div className="analysisPanel">
+                        <div className="analysisMeta">
+                          <div>
+                            <strong>문서 유형</strong>
+                            <p>{analysis.documentType || '-'}</p>
+                          </div>
+                          <div>
+                            <strong>총액 라벨</strong>
+                            <p>{analysis.totalLabel || '-'}</p>
+                          </div>
+                          <div>
+                            <strong>신뢰도</strong>
+                            <p>
+                              {typeof analysis.confidence === 'number'
+                                ? `${Math.round(analysis.confidence * 100)}%`
+                                : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <strong>분석 출처</strong>
+                            <p>{analysis.source || row.source || '-'}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <strong>분석 품목</strong>
+                          {analysis.items?.length ? (
+                            <ul className="miniList compactList">
+                              {analysis.items.map((item, index) => (
+                                <li key={`${row.id}-analysis-${item.name}-${index}`}>
+                                  {item.name} / {Number(item.qty || 0)}개 /{' '}
+                                  {formatWon(item.amount || 0)}원
+                                  {item.isOption ? ' / 옵션' : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>저장된 분석 품목이 없습니다.</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <strong>분석 메모</strong>
+                          {analysis.notes?.length ? (
+                            <ul className="miniList compactList">
+                              {analysis.notes.map((note, index) => (
+                                <li key={`${row.id}-note-${index}`}>{note}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>저장된 메모가 없습니다.</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </details>
               </li>
             ))}
           </ul>
