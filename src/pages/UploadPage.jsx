@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReceiptsBatch, listenReceiptsByDate } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
-import { buildBakeryComputation } from '../lib/bakeryMatcher'
+import { buildBakeryComputation, learnCatalogAlias } from '../lib/bakeryMatcher'
 import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
 
 function todayString() {
@@ -158,6 +158,12 @@ export default function UploadPage() {
         index === itemIndex ? { ...item, [field]: value } : item,
       ),
     }))
+  }
+
+  function applySuggestedItemName(uploadId, itemIndex, rawName, suggestionName) {
+    learnCatalogAlias(rawName, suggestionName)
+    updateItem(uploadId, itemIndex, 'name', suggestionName)
+    setMessage(`학습 별칭 저장: ${rawName} -> ${suggestionName}`)
   }
 
   function addItemRow(uploadId) {
@@ -464,10 +470,30 @@ export default function UploadPage() {
                               <div className="itemMatch">
                                 {matched?.isBakery ? (
                                   <span className="tag bakery">베이커리 매칭: {matched.matchedBakeryName}</span>
+                                ) : matched?.suggestions?.length ? (
+                                  <span className="tag normal">자동 매칭 실패</span>
                                 ) : (
                                   <span className="tag normal">베이커리 아님</span>
                                 )}
                               </div>
+
+                              {matched?.suggestions?.length && !matched?.isBakery ? (
+                                <div className="suggestionGroup">
+                                  <p className="suggestionLabel">추천 후보</p>
+                                  <div className="suggestionChips">
+                                    {matched.suggestions.map((suggestion) => (
+                                      <button
+                                        key={`${entry.id}-${index}-${suggestion.name}`}
+                                        type="button"
+                                        className="suggestionChip"
+                                        onClick={() => applySuggestedItemName(entry.id, index, item.name, suggestion.name)}
+                                      >
+                                        {suggestion.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
 
                               <button type="button" onClick={() => removeItemRow(entry.id, index)}>
                                 삭제

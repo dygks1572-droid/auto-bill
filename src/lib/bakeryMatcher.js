@@ -1,5 +1,14 @@
 import { DEFAULT_PRODUCT_SEEDS, OPTION_NAMES } from './seedData.js'
 
+const MATCH_THRESHOLD = 72
+const SUGGESTION_THRESHOLD = 48
+const MAX_SUGGESTIONS = 3
+const LEARNED_ALIAS_STORAGE_KEY = 'bill.learned-bakery-aliases.v1'
+
+function canUseStorage() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+}
+
 function parseNumber(value, fallback = 0) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   const digits = String(value ?? '')
@@ -9,17 +18,83 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-export function normalizeText(value) {
+function stripDecorators(value) {
   return String(value ?? '')
-    .replace(/\s+/g, '')
-    .replace(/[()[\]{}.,:+\-_/]/g, '')
-    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/[{}]/g, ' ')
+    .replace(/\b(?:hot|ice|iced|warm|large|regular|set|single|double|decaf)\b/gi, ' ')
+    .replace(/(?:추가|변경|옵션|세트|단품|라지|미디움|톨|벤티|따뜻한|차가운)/g, ' ')
+    .replace(/\d+\s*(?:ea|개입|개|pcs?|잔|병|팩|box|g|kg|ml|l)\b/gi, ' ')
+    .replace(/[0-9]+/g, ' ')
+    .replace(/[()[\]{}.,:+\-_/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function normalizeText(value) {
+  return stripDecorators(value).replace(/\s+/g, '').toLowerCase()
+}
+
+function readLearnedAliases() {
+  if (!canUseStorage()) return {}
+
+  try {
+    const raw = window.localStorage.getItem(LEARNED_ALIAS_STORAGE_KEY)
+    if (!raw) return {}
+
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch (error) {
+    console.warn('Failed to read learned bakery aliases', error)
+    return {}
+  }
+}
+
+function writeLearnedAliases(value) {
+  if (!canUseStorage()) return
+
+  try {
+    window.localStorage.setItem(LEARNED_ALIAS_STORAGE_KEY, JSON.stringify(value))
+  } catch (error) {
+    console.warn('Failed to write learned bakery aliases', error)
+  }
+}
+
+export function learnCatalogAlias(rawName, matchedName) {
+  const normalizedAlias = normalizeText(rawName)
+  const normalizedTarget = normalizeText(matchedName)
+
+  if (!normalizedAlias || !normalizedTarget) return false
+  if (normalizedAlias === normalizedTarget) return false
+
+  const learned = readLearnedAliases()
+  const next = { ...learned }
+  const aliases = Array.isArray(next[matchedName]) ? next[matchedName] : []
+  const alreadyExists = aliases.some((alias) => normalizeText(alias) === normalizedAlias)
+
+  if (alreadyExists) return false
+
+  next[matchedName] = [...aliases, String(rawName).trim()]
+  writeLearnedAliases(next)
+  return true
+}
+
+function mergeAliases(baseAliases, learnedAliases) {
+  const merged = [...(baseAliases || [])]
+
+  for (const alias of learnedAliases || []) {
+    if (!alias) continue
+    if (merged.some((item) => normalizeText(item) === normalizeText(alias))) continue
+    merged.push(alias)
+  }
+
+  return merged
 }
 
 function resolveProducts(products) {
   const source = Array.isArray(products) && products.length ? products : []
-  if (!source.length) return DEFAULT_PRODUCT_SEEDS
-
+  const learned = readLearnedAliases()
   const merged = new Map()
 
   for (const item of DEFAULT_PRODUCT_SEEDS) {
@@ -32,11 +107,14 @@ function resolveProducts(products) {
     merged.set(key, item)
   }
 
-  return Array.from(merged.values())
+  return Array.from(merged.values()).map((item) => ({
+    ...item,
+    aliases: mergeAliases(item.aliases, learned[item.name]),
+  }))
 }
 
 function normalizeKeepWords(value) {
-  return String(value ?? '')
+  return stripDecorators(value)
     .replace(/[^0-9a-zA-Z가-힣\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -54,6 +132,40 @@ function overlapScore(a, b) {
   const setB = new Set(tb)
   const hit = ta.filter((token) => setB.has(token)).length
   return hit / Math.max(ta.length, tb.length)
+}
+
+function bigrams(value) {
+  const normalized = normalizeText(value)
+  if (!normalized) return []
+  if (normalized.length === 1) return [normalized]
+
+  const grams = []
+  for (let i = 0; i < normalized.length - 1; i += 1) {
+    grams.push(normalized.slice(i, i + 2))
+  }
+  return grams
+}
+
+function bigramScore(a, b) {
+  const gramsA = bigrams(a)
+  const gramsB = bigrams(b)
+  if (!gramsA.length || !gramsB.length) return 0
+
+  const counts = new Map()
+  for (const gram of gramsB) {
+    counts.set(gram, (counts.get(gram) || 0) + 1)
+  }
+
+  let hit = 0
+  for (const gram of gramsA) {
+    const count = counts.get(gram) || 0
+    if (count > 0) {
+      hit += 1
+      counts.set(gram, count - 1)
+    }
+  }
+
+  return (2 * hit) / (gramsA.length + gramsB.length)
 }
 
 function baseOptionName(rawName) {
@@ -83,48 +195,80 @@ export function buildCatalogIndex(products = DEFAULT_PRODUCT_SEEDS) {
   })
 }
 
-export function matchCatalogItem(rawName, products = DEFAULT_PRODUCT_SEEDS) {
+function scoreCandidate(targetRaw, target, rawCandidate, normalizedName) {
+  if (!target || !normalizedName) return 0
+  if (target === normalizedName) return 100
+  if (target.includes(normalizedName) || normalizedName.includes(target)) return 92
+
+  const overlap = overlapScore(targetRaw, rawCandidate)
+  const bigram = bigramScore(targetRaw, rawCandidate)
+  const normalizedBigram = bigramScore(target, normalizedName)
+
+  return Math.round(overlap * 35 + bigram * 35 + normalizedBigram * 30)
+}
+
+function toMatchResult(item, score, rawCandidate) {
+  return {
+    id: item.id || item.name,
+    name: item.name,
+    category: item.category,
+    group: item.group,
+    aliases: item.aliases || [],
+    countInBakeryTotal: item.countInBakeryTotal !== false,
+    reviewNeeded: !!item.reviewNeeded,
+    optionLike: !!item.optionLike,
+    score,
+    rawCandidate,
+  }
+}
+
+function rankCatalogCandidates(rawName, products = DEFAULT_PRODUCT_SEEDS) {
   const targetRaw = baseOptionName(rawName)
   const target = normalizeText(targetRaw)
-  if (!target) return null
+  if (!target) return []
 
   const catalog = buildCatalogIndex(products)
-  let best = null
-  let bestScore = -1
+  const ranked = []
 
   for (const item of catalog) {
+    let itemBest = null
+
     for (let i = 0; i < item.normalizedNames.length; i += 1) {
       const normalizedName = item.normalizedNames[i]
       const rawCandidate = item.rawNames[i]
-      if (!normalizedName) continue
+      const score = scoreCandidate(targetRaw, target, rawCandidate, normalizedName)
 
-      let score = 0
-      if (target === normalizedName) {
-        score = 100
-      } else if (target.includes(normalizedName) || normalizedName.includes(target)) {
-        score = 90
-      } else {
-        score = overlapScore(targetRaw, rawCandidate) * 70
+      if (!itemBest || score > itemBest.score) {
+        itemBest = toMatchResult(item, score, rawCandidate)
       }
+    }
 
-      if (score > bestScore || (score === bestScore && best?.optionLike && !item.optionLike)) {
-        best = item
-        bestScore = score
-      }
+    if (itemBest && itemBest.score > 0) {
+      ranked.push(itemBest)
     }
   }
 
-  if (!best || bestScore < 70) return null
+  ranked.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.name.localeCompare(b.name, 'ko')
+  })
+
+  return ranked
+}
+
+export function matchCatalogItem(rawName, products = DEFAULT_PRODUCT_SEEDS) {
+  const ranked = rankCatalogCandidates(rawName, products)
+  const best = ranked[0] || null
+
+  if (!best || best.score < MATCH_THRESHOLD) {
+    return null
+  }
+
   return {
-    id: best.id || best.name,
-    name: best.name,
-    category: best.category,
-    group: best.group,
-    aliases: best.aliases || [],
-    countInBakeryTotal: best.countInBakeryTotal !== false,
-    reviewNeeded: !!best.reviewNeeded,
-    optionLike: !!best.optionLike,
-    score: bestScore,
+    ...best,
+    suggestions: ranked
+      .filter((item) => item.score >= SUGGESTION_THRESHOLD)
+      .slice(0, MAX_SUGGESTIONS),
   }
 }
 
@@ -142,6 +286,9 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
 
     const optionLine = isOptionLineName(name)
     const matched = matchCatalogItem(name, products)
+    const suggestions = (matched?.suggestions || rankCatalogCandidates(name, products))
+      .filter((item) => item.score >= SUGGESTION_THRESHOLD)
+      .slice(0, MAX_SUGGESTIONS)
     const isOption = optionLine || matched?.optionLike
 
     if (isOption) {
@@ -155,6 +302,7 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
         matchedBakeryName: matched?.name || null,
         category: matched?.category || 'option',
         countInBakeryTotal: false,
+        suggestions,
       }
 
       if (lastBaseItem) {
@@ -196,6 +344,7 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
       reviewNeeded,
       countInBakeryTotal,
       options: [],
+      suggestions,
     }
 
     resultItems.push(row)

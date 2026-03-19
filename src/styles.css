@@ -677,3 +677,62 @@ h3 {
     justify-content: space-between;
   }
 }
+
+.itemMatch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestionGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.suggestionLabel {
+  margin: 0;
+  color: #6a6a73;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.suggestionChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestionChip {
+  padding: 9px 14px;
+  background: rgba(0, 122, 255, 0.08);
+  color: #005ecb;
+  box-shadow: none;
+}
+
+.productActionCard,
+.productSectionHeader,
+.productRowHeader,
+.productAliasBlock {
+  display: grid;
+  gap: 8px;
+}
+
+.productSectionHeader {
+  margin-bottom: 12px;
+}
+
+.productRowHeader {
+  gap: 4px;
+}
+
+.productAliasChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.06);
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 600;
+}
