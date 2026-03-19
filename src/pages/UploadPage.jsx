@@ -212,6 +212,14 @@ export default function UploadPage() {
     )
   }
 
+  async function retryUploadAnalysis(uploadId) {
+    const target = uploadsRef.current.find((entry) => entry.id === uploadId)
+    if (!target || autoReading) return
+
+    setMessage('재분석 중: ' + target.file.name)
+    await processUploads([target])
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     if (!uploads.length) return
@@ -340,6 +348,16 @@ export default function UploadPage() {
                               ? '분석 실패'
                               : '분석 대기'}
                       </span>
+                      {entry.status !== 'idle' && entry.status !== 'reading' ? (
+                        <button
+                          type="button"
+                          className="ghostButton"
+                          onClick={() => retryUploadAnalysis(entry.id)}
+                          disabled={autoReading}
+                        >
+                          다시 분석
+                        </button>
+                      ) : null}
                       <button type="button" className="ghostButton" onClick={() => removeUpload(entry.id)}>
                         제거
                       </button>
