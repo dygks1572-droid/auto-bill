@@ -150,7 +150,7 @@ export default function UploadPage() {
     try {
       const { prepared, skipped } = await prepareReceiptUploads(nextFiles)
       const nextUploads = prepared.map((entry, index) =>
-        createUploadEntry(entry.originalFile, index, entry.optimizedFile),
+        createUploadEntry(entry.originalFile, index, entry.originalFile),
       )
 
       setUploads(nextUploads)

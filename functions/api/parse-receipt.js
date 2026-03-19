@@ -154,6 +154,19 @@ function scoreParsedReceipt(parsed, stage = 'vision') {
   return clamp(Number(score.toFixed(2)), 0.58, 0.94)
 }
 
+function shouldRetryHighAccuracy(parsed) {
+  const items = Array.isArray(parsed?.items) ? parsed.items : []
+  const baseItems = items.filter((item) => !item?.isOption)
+  const confidence = scoreParsedReceipt(parsed, 'vision')
+
+  if (baseItems.length === 0) return true
+  if (typeof parsed?.orderTotal !== 'number' || parsed.orderTotal <= 0) return true
+  if (confidence < 0.82) return true
+  if (items.length <= 1 && !parsed?.orderedDate) return true
+
+  return false
+}
+
 function isRuleBasedResultStrong(parsed, sourceParse) {
   if (!parsed) return false
 
@@ -248,7 +261,7 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
   return response.json()
 }
 
-async function requestStructuredParse(env, { imageBase64, mimeType, fileName, ocrText = '' }) {
+async function requestStructuredParse(env, { imageBase64, mimeType, fileName, ocrText = '', mode = 'default' }) {
   const developerPrompt = [
     'Extract only visible data from a Korean cafe or bakery receipt.',
     'Detect source, documentType, orderedDate, totalLabel, orderTotal, item rows, notes, confidence.',
@@ -262,9 +275,25 @@ async function requestStructuredParse(env, { imageBase64, mimeType, fileName, oc
     'Use qty=1 when quantity is unclear.',
     'Do not include delivery fee unless the chosen total label includes it.',
     'orderedDate must be YYYY-MM-DD or null.',
+    ...(mode === 'rescue'
+      ? [
+          'This is a second high-accuracy pass for a difficult receipt.',
+          'Prioritize exact text recovery over speed.',
+          'Read item names, quantities, totals, and dates carefully even when the print is faint, dense, tilted, or partially blurred.',
+          'If the OCR hint conflicts with the image, trust the image.',
+        ]
+      : []),
   ].join(' ')
 
-  const userContent = [{ type: 'input_text', text: `Analyze receipt image ${fileName} and return the schema only.` }]
+  const userContent = [
+    {
+      type: 'input_text',
+      text:
+        mode === 'rescue'
+          ? `Re-analyze difficult receipt image ${fileName}. Double-check item names, totals, quantities, dates, and option rows. Return the schema only.`
+          : `Analyze receipt image ${fileName} and return the schema only.`,
+    },
+  ]
 
   if (ocrText.trim()) {
     userContent.push({
@@ -303,6 +332,7 @@ async function requestStructuredParse(env, { imageBase64, mimeType, fileName, oc
           ...receiptSchema,
         },
       },
+      max_output_tokens: mode === 'rescue' ? 2200 : 1800,
     }),
   })
 
@@ -375,7 +405,37 @@ export async function onRequestPost(context) {
       return json({ error: 'Failed to parse structured output', raw: payload }, 500)
     }
 
-    return json({ ok: true, parsed: normalizeParsedResult(parsed, 'vision'), stage: 'vision-schema' })
+    let normalized = normalizeParsedResult(parsed, 'vision')
+
+    if (shouldRetryHighAccuracy(normalized)) {
+      const rescuePayload = await requestStructuredParse(env, {
+        imageBase64,
+        mimeType,
+        fileName,
+        ocrText,
+        mode: 'rescue',
+      })
+      const rescueText = extractStructuredText(rescuePayload)
+
+      try {
+        const rescueParsed = JSON.parse(rescueText)
+        const normalizedRescue = normalizeParsedResult(rescueParsed, 'vision')
+        const rescueItems = Array.isArray(normalizedRescue.items) ? normalizedRescue.items.length : 0
+        const baseItems = Array.isArray(normalized.items) ? normalized.items.length : 0
+
+        if (normalizedRescue.confidence >= normalized.confidence || rescueItems > baseItems) {
+          normalized = {
+            ...normalizedRescue,
+            notes: [...(normalizedRescue.notes || []), 'rescue-pass'],
+          }
+          return json({ ok: true, parsed: normalized, stage: 'vision-schema-rescue' })
+        }
+      } catch (error) {
+        console.warn('High-accuracy rescue parse failed.', error)
+      }
+    }
+
+    return json({ ok: true, parsed: normalized, stage: 'vision-schema' })
   } catch (error) {
     return json({ error: error?.message || 'Unknown server error' }, 500)
   }
