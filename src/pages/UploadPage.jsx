@@ -314,6 +314,11 @@ export default function UploadPage() {
             {uploads.map((entry, uploadIndex) => {
               const computed = buildBakeryComputation(entry.items, products)
               const itemCount = entry.items.filter((item) => item.name).length
+              const parsedItems = entry.parsedReceipt?.items || []
+              const recognizedItemCount = parsedItems.filter((item) => item.name && !item.isOption).length
+              const recognizedOptionCount = parsedItems.filter((item) => item.isOption).length
+              const matchedBakeryCount = computed.bakeryBreakdown.length
+              const amountGap = Number(entry.orderTotal || 0) - computed.bakeryTotal
 
               return (
                 <div key={entry.id} className="card nestedCard uploadCard">
@@ -357,45 +362,80 @@ export default function UploadPage() {
                       </div>
 
                       <div className="uploadQuickFacts">
-                        <div className="uploadFact">
+                        <div className="uploadFact emphasis">
                           <span>주문금액</span>
                           <strong>{Number(entry.orderTotal || 0).toLocaleString()}원</strong>
                         </div>
-                        <div className="uploadFact">
+                        <div className="uploadFact emphasis">
                           <span>베이커리 합계</span>
                           <strong>{computed.bakeryTotal.toLocaleString()}원</strong>
                         </div>
                         <div className="uploadFact">
-                          <span>품목 수</span>
-                          <strong>{itemCount}개</strong>
+                          <span>인식 품목</span>
+                          <strong>{recognizedItemCount || itemCount}개</strong>
                         </div>
-
+                        <div className="uploadFact">
+                          <span>옵션 행</span>
+                          <strong>{recognizedOptionCount}개</strong>
+                        </div>
                       </div>
                     </div>
 
                     <div className="uploadCardContent">
-                      {entry.parsedReceipt && (
-                        <div className="card nestedCard parseResult compactParseCard">
-                          <h3>자동 읽기 결과</h3>
-                          <div className="parseGrid">
-                            <div>
-                              <strong>주문금액</strong>
-                              <p>
-                                {typeof entry.parsedReceipt.orderTotal === 'number'
-                                  ? entry.parsedReceipt.orderTotal.toLocaleString()
-                                  : entry.parsedReceipt.orderTotal || '-'}
-                              </p>
-                            </div>
-                          </div>
-
+                      <div className="analysisSpotlight card nestedCard">
+                        <div className="analysisSpotlightHeader">
                           <div>
-                            <strong>추출 품목</strong>
-                            {entry.parsedReceipt.items?.length ? (
-                              <ul className="miniList compactList">
-                                {entry.parsedReceipt.items.map((item, index) => (
-                                  <li key={`${item.name}-${index}`}>
-                                    {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
-                                    {item.isOption ? ' / 옵션' : ''}
+                            <p className="sectionEyebrow">Analysis</p>
+                            <h3>한눈에 보는 분석 결과</h3>
+                          </div>
+                          <span className={`statusBadge status-${entry.status}`}>
+                            {entry.status === 'done'
+                              ? '확인 완료'
+                              : entry.status === 'reading'
+                                ? '읽는 중'
+                                : entry.status === 'error'
+                                  ? '확인 필요'
+                                  : '대기'}
+                          </span>
+                        </div>
+
+                        <div className="analysisSummaryGrid">
+                          <div className="analysisSummaryCard">
+                            <span>채널</span>
+                            <strong>{entry.autoFilled.source || 'manual'}</strong>
+                          </div>
+                          <div className="analysisSummaryCard">
+                            <span>매칭 베이커리</span>
+                            <strong>{matchedBakeryCount}개</strong>
+                          </div>
+                          <div className="analysisSummaryCard">
+                            <span>편집 품목</span>
+                            <strong>{itemCount}개</strong>
+                          </div>
+                          <div className="analysisSummaryCard">
+                            <span>차액</span>
+                            <strong>{amountGap.toLocaleString()}원</strong>
+                          </div>
+                        </div>
+
+                        {entry.parsedReceipt ? (
+                          <div className="parseResult compactParseCard">
+                            <div className="analysisListHeader">
+                              <strong>자동 추출 품목</strong>
+                              <span>{parsedItems.length}줄</span>
+                            </div>
+                            {parsedItems.length ? (
+                              <ul className="analysisLineList">
+                                {parsedItems.map((item, index) => (
+                                  <li key={`${item.name}-${index}`} className={item.isOption ? 'isOptionRow' : ''}>
+                                    <div>
+                                      <strong>{item.name}</strong>
+                                      <span>{item.isOption ? '옵션 행' : '일반 품목'}</span>
+                                    </div>
+                                    <div>
+                                      <span>{item.qty}개</span>
+                                      <strong>{item.amount.toLocaleString()}원</strong>
+                                    </div>
                                   </li>
                                 ))}
                               </ul>
@@ -403,8 +443,10 @@ export default function UploadPage() {
                               <p>추출된 품목이 없습니다.</p>
                             )}
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <p className="subtleText">분석 후 자동 추출 품목이 여기에 요약됩니다.</p>
+                        )}
+                      </div>
 
                       {entry.error && <p className="message errorMessage">{entry.error}</p>}
 
@@ -555,21 +597,29 @@ export default function UploadPage() {
           {savedRows.length === 0 ? (
             <p>아직 저장된 영수증이 없습니다.</p>
           ) : (
-            <ul className="receiptList">
+            <ul className="receiptList receiptOverviewList">
               {savedRows.map((row) => (
                 <li key={row.id}>
-                <div>
-                  <strong>{row.imageName || '사진 없음'}</strong>
-                  <span>{row.source}</span>
-                </div>
-                <div>
-                  주문금액 {Number(row.orderTotal || 0).toLocaleString()}원 / 베이커리{' '}
-                  {Number(row.bakeryTotal || 0).toLocaleString()}원
-                </div>
-
-              </li>
-            ))}
-          </ul>
+                  <div className="receiptRowHeader">
+                    <div>
+                      <strong>{row.imageName || '사진 없음'}</strong>
+                      <span>{row.source}</span>
+                    </div>
+                    <span className="tag bakery">저장 완료</span>
+                  </div>
+                  <div className="receiptRowMetrics">
+                    <div>
+                      <span>주문금액</span>
+                      <strong>{Number(row.orderTotal || 0).toLocaleString()}원</strong>
+                    </div>
+                    <div>
+                      <span>베이커리</span>
+                      <strong>{Number(row.bakeryTotal || 0).toLocaleString()}원</strong>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </form>

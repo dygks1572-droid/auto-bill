@@ -743,3 +743,124 @@ h3 {
   height: auto;
   object-fit: contain;
 }
+
+.uploadFact.emphasis {
+  background: linear-gradient(180deg, rgba(234, 255, 249, 0.96), rgba(214, 246, 235, 0.9));
+  border-color: rgba(44, 181, 152, 0.18);
+}
+
+.analysisSpotlight,
+.analysisSpotlightHeader,
+.analysisSummaryGrid,
+.analysisListHeader,
+.receiptRowHeader,
+.receiptRowMetrics {
+  display: grid;
+  gap: 12px;
+}
+
+.analysisSpotlight {
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(251, 255, 254, 0.98), rgba(239, 250, 246, 0.94));
+}
+
+.analysisSpotlightHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.analysisSummaryGrid,
+.receiptRowMetrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analysisSummaryCard,
+.receiptRowMetrics > div {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(32, 122, 103, 0.08);
+}
+
+.analysisSummaryCard span,
+.analysisListHeader span,
+.analysisLineList li span,
+.receiptRowMetrics span {
+  color: #5f6d68;
+  font-size: 12px;
+}
+
+.analysisSummaryCard strong,
+.receiptRowMetrics strong {
+  font-size: 19px;
+  letter-spacing: -0.03em;
+}
+
+.analysisListHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.analysisLineList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.analysisLineList li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(17, 17, 17, 0.05);
+}
+
+.analysisLineList li > div {
+  display: grid;
+  gap: 4px;
+}
+
+.analysisLineList li > div:last-child {
+  justify-items: end;
+}
+
+.analysisLineList li.isOptionRow {
+  background: rgba(240, 248, 245, 0.96);
+  border-style: dashed;
+}
+
+.receiptOverviewList li {
+  gap: 14px;
+}
+
+.receiptRowHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.receiptRowHeader > div {
+  display: grid;
+  gap: 4px;
+}
+
+@media (max-width: 480px) {
+  .analysisSpotlightHeader,
+  .receiptRowHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .analysisLineList li {
+    grid-template-columns: 1fr;
+  }
+
+  .analysisLineList li > div:last-child {
+    justify-items: start;
+  }
+}
