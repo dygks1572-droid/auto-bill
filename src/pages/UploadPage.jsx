@@ -238,13 +238,19 @@ export default function UploadPage() {
         }
       })
 
-      await createReceiptsBatch(payloads)
+      const saveResult = await createReceiptsBatch(payloads)
 
       for (const entry of uploads) {
         URL.revokeObjectURL(entry.previewUrl)
       }
       setUploads([])
-      setMessage(`${uploads.length}건 저장 완료`)
+      const completedMessage = saveResult.synced
+        ? `${uploads.length}건 저장 완료`
+        : `${uploads.length}건 저장 완료 (로컬 저장)`
+      setMessage(completedMessage)
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(completedMessage)
+      }
     } catch (error) {
       console.error(error)
       setMessage(error?.message || '저장 실패')

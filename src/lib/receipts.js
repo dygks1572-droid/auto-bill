@@ -9,6 +9,7 @@ import { db } from './firebase'
 
 const RECEIPTS = 'receipts'
 const RECEIPTS_STORAGE_KEY = 'bill.receipts.v1'
+const FIRESTORE_COMMIT_TIMEOUT_MS = 8000
 
 function todayString() {
   const now = new Date()
@@ -92,8 +93,8 @@ function filterReceiptsByDate(rows, targetDate) {
 }
 
 export async function createReceipt(payload) {
-  const [id] = await createReceiptsBatch([payload])
-  return id
+  const result = await createReceiptsBatch([payload])
+  return result.ids[0]
 }
 
 function normalizeReceiptPayload(payload, { uploadedDate, orderedDate }) {
@@ -113,7 +114,9 @@ function normalizeReceiptPayload(payload, { uploadedDate, orderedDate }) {
 }
 
 export async function createReceiptsBatch(payloads) {
-  if (!Array.isArray(payloads) || !payloads.length) return []
+  if (!Array.isArray(payloads) || !payloads.length) {
+    return { ids: [], synced: false, fallback: false }
+  }
 
   const uploadedDate = todayString()
   const createdAtMs = Date.now()
@@ -140,13 +143,24 @@ export async function createReceiptsBatch(payloads) {
   const nextCachedRows = sortReceipts(mergeReceipts(readCachedReceipts(), cachedRows))
   writeCachedReceipts(nextCachedRows)
 
+  let synced = false
+  let fallback = false
+
   try {
-    await batch.commit()
+    await Promise.race([
+      batch.commit().then(() => {
+        synced = true
+      }),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('commit-timeout')), FIRESTORE_COMMIT_TIMEOUT_MS)
+      }),
+    ])
   } catch (error) {
-    console.warn('Failed to sync receipts to Firestore. Using local cache instead.', error)
+    fallback = true
+    console.warn('Failed to sync receipts to Firestore in time. Using local cache instead.', error)
   }
 
-  return refs
+  return { ids: refs, synced, fallback }
 }
 
 export function listenReceiptsByDate(targetDate, callback) {
