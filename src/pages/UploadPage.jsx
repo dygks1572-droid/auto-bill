@@ -316,10 +316,7 @@ export default function UploadPage() {
                       <h3>
                         {uploadIndex + 1}. {entry.file.name}
                       </h3>
-                      <p className="subtleText">
-                        추정 채널 {entry.autoFilled.source || 'manual'} / 주문일{' '}
-                        {entry.autoFilled.orderedDate || todayString()}
-                      </p>
+                      <p className="subtleText">추정 채널 {entry.autoFilled.source || 'manual'}</p>
                     </div>
                     <div className="uploadCardActions">
                       <span className={`statusBadge status-${entry.status}`}>
@@ -366,10 +363,7 @@ export default function UploadPage() {
                           <span>품목 수</span>
                           <strong>{itemCount}개</strong>
                         </div>
-                        <div className="uploadFact">
-                          <span>신뢰도</span>
-                          <strong>{Math.round((entry.autoFilled.confidence || 0) * 100)}%</strong>
-                        </div>
+
                       </div>
                     </div>
 
@@ -379,24 +373,12 @@ export default function UploadPage() {
                           <h3>자동 읽기 결과</h3>
                           <div className="parseGrid">
                             <div>
-                              <strong>문서 유형</strong>
-                              <p>{entry.parsedReceipt.documentType || '-'}</p>
-                            </div>
-                            <div>
                               <strong>주문금액</strong>
                               <p>
                                 {typeof entry.parsedReceipt.orderTotal === 'number'
                                   ? entry.parsedReceipt.orderTotal.toLocaleString()
                                   : entry.parsedReceipt.orderTotal || '-'}
                               </p>
-                            </div>
-                            <div>
-                              <strong>총액 라벨</strong>
-                              <p>{entry.parsedReceipt.totalLabel || '-'}</p>
-                            </div>
-                            <div>
-                              <strong>신뢰도</strong>
-                              <p>{Math.round((entry.autoFilled.confidence || 0) * 100)}%</p>
                             </div>
                           </div>
 
@@ -578,12 +560,7 @@ export default function UploadPage() {
                   주문금액 {Number(row.orderTotal || 0).toLocaleString()}원 / 베이커리{' '}
                   {Number(row.bakeryTotal || 0).toLocaleString()}원
                 </div>
-                <div>
-                  문서유형 {row.analysis?.documentType || '-'} / 신뢰도{' '}
-                  {typeof row.analysis?.confidence === 'number'
-                    ? `${Math.round(row.analysis.confidence * 100)}%`
-                    : '-'}
-                </div>
+
               </li>
             ))}
           </ul>

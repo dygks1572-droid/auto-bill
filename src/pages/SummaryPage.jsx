@@ -127,9 +127,7 @@ export default function SummaryPage() {
                 <div>
                   주문금액 {formatWon(row.orderTotal)}원 / 베이커리 {formatWon(row.bakeryTotal)}원
                 </div>
-                <div>
-                  업로드일 {row.uploadedDate || '-'} / 주문일 {row.orderedDate || '-'}
-                </div>
+                <div>업로드일 {row.uploadedDate || '-'}</div>
                 <details className="analysisDetails">
                   <summary>분석 내용 보기</summary>
                   {(() => {
@@ -137,22 +135,6 @@ export default function SummaryPage() {
                     return (
                       <div className="analysisPanel">
                         <div className="analysisMeta">
-                          <div>
-                            <strong>문서 유형</strong>
-                            <p>{analysis.documentType || '-'}</p>
-                          </div>
-                          <div>
-                            <strong>총액 라벨</strong>
-                            <p>{analysis.totalLabel || '-'}</p>
-                          </div>
-                          <div>
-                            <strong>신뢰도</strong>
-                            <p>
-                              {typeof analysis.confidence === 'number'
-                                ? `${Math.round(analysis.confidence * 100)}%`
-                                : '-'}
-                            </p>
-                          </div>
                           <div>
                             <strong>분석 출처</strong>
                             <p>{analysis.source || row.source || '-'}</p>
