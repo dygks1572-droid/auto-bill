@@ -60,7 +60,7 @@ export default function SummaryPage() {
 
       <div className="card">
         <label>
-          조회일
+          업로드 조회일
           <input type="date" value={orderedDate} onChange={(e) => setOrderedDate(e.target.value)} />
         </label>
       </div>
@@ -111,6 +111,9 @@ export default function SummaryPage() {
                 </div>
                 <div>
                   주문금액 {formatWon(row.orderTotal)}원 / 베이커리 {formatWon(row.bakeryTotal)}원
+                </div>
+                <div>
+                  업로드일 {row.uploadedDate || '-'} / 주문일 {row.orderedDate || '-'}
                 </div>
               </li>
             ))}

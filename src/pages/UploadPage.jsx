@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createReceipt } from '../lib/receipts'
+import { createReceipt, listenReceiptsByDate } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
 import { buildBakeryComputation } from '../lib/bakeryMatcher'
 import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
@@ -41,10 +41,16 @@ export default function UploadPage() {
   const [saving, setSaving] = useState(false)
   const [autoReading, setAutoReading] = useState(false)
   const [message, setMessage] = useState('')
+  const [savedRows, setSavedRows] = useState([])
   const uploadsRef = useRef([])
 
   useEffect(() => {
     const unsub = listenProducts(setProducts)
+    return () => unsub?.()
+  }, [])
+
+  useEffect(() => {
+    const unsub = listenReceiptsByDate(todayString(), setSavedRows)
     return () => unsub?.()
   }, [])
 
@@ -179,31 +185,63 @@ export default function UploadPage() {
     setMessage('')
 
     try {
-      await Promise.race([
-        Promise.all(
-          uploads.map((entry) => {
-            const computed = buildBakeryComputation(entry.items, products)
+      const results = await Promise.allSettled(
+        uploads.map(async (entry) => {
+          const computed = buildBakeryComputation(entry.items, products)
 
-            return createReceipt({
-              source: entry.autoFilled.source || 'manual',
-              imageName: entry.file?.name || '',
-              orderedDate: entry.autoFilled.orderedDate || todayString(),
-              orderTotal: entry.orderTotal,
-              bakeryTotal: computed.bakeryTotal,
-              bakeryBreakdown: computed.bakeryBreakdown,
-              items: computed.items,
-              note: entry.note,
-            })
-          }),
-        ),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('저장 시간 초과')), 10000)),
-      ])
+          await createReceipt({
+            source: entry.autoFilled.source || 'manual',
+            imageName: entry.file?.name || '',
+            orderedDate: entry.autoFilled.orderedDate || todayString(),
+            orderTotal: entry.orderTotal,
+            bakeryTotal: computed.bakeryTotal,
+            bakeryBreakdown: computed.bakeryBreakdown,
+            items: computed.items,
+            note: entry.note,
+          })
 
-      for (const entry of uploads) {
-        URL.revokeObjectURL(entry.previewUrl)
+          return entry.id
+        }),
+      )
+
+      const successIds = new Set(
+        results.filter((result) => result.status === 'fulfilled').map((result) => result.value),
+      )
+
+      const failedEntries = []
+      let firstError = ''
+
+      for (let index = 0; index < uploads.length; index += 1) {
+        const entry = uploads[index]
+        const result = results[index]
+
+        if (successIds.has(entry.id)) {
+          URL.revokeObjectURL(entry.previewUrl)
+          continue
+        }
+
+        const errorMessage =
+          result.status === 'rejected'
+            ? result.reason?.message || '저장 실패'
+            : '저장 실패'
+
+        if (!firstError) firstError = errorMessage
+
+        failedEntries.push({
+          ...entry,
+          error: errorMessage,
+        })
       }
-      setUploads([])
-      setMessage(`${totalSelected}건 저장 완료`)
+
+      setUploads(failedEntries)
+
+      if (!failedEntries.length) {
+        setMessage(`${successIds.size}건 저장 완료`)
+      } else if (successIds.size > 0) {
+        setMessage(`${successIds.size}건 저장 완료, ${failedEntries.length}건 실패: ${firstError}`)
+      } else {
+        setMessage(firstError || '저장 실패')
+      }
     } catch (error) {
       console.error(error)
       setMessage(error?.message || '저장 실패')
@@ -430,6 +468,28 @@ export default function UploadPage() {
         ) : null}
 
         {message && <p className="message">{message}</p>}
+
+        <div className="card nestedCard">
+          <h3>오늘 저장된 기록</h3>
+          {savedRows.length === 0 ? (
+            <p>아직 저장된 영수증이 없습니다.</p>
+          ) : (
+            <ul className="receiptList">
+              {savedRows.map((row) => (
+                <li key={row.id}>
+                  <div>
+                    <strong>{row.imageName || '사진 없음'}</strong>
+                    <span>{row.source}</span>
+                  </div>
+                  <div>
+                    주문금액 {Number(row.orderTotal || 0).toLocaleString()}원 / 베이커리{' '}
+                    {Number(row.bakeryTotal || 0).toLocaleString()}원
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </form>
     </div>
   )
