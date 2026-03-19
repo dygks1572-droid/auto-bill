@@ -37,6 +37,11 @@ export default function App() {
       <div className="appFrame">
         <header className="topbar">
           <div className="topbarMeta">
+            <img
+              className="brandLogo"
+              src="https://oraund.com/web/awesome_img/logo.png"
+              alt="ORAUND"
+            />
             <span className="eyebrow">Bakery Receipt</span>
             <h1>배달 주문 정리</h1>
             <p>모바일에서 빠르게 업로드하고, 저장한 주문을 다시 확인할 수 있게 구성했습니다.</p>
