@@ -264,15 +264,17 @@ export async function prepareReceiptUploads(files) {
   const seenFingerprints = []
 
   for (const file of files || []) {
-    const optimized = await optimizeReceiptImage(file)
+    let optimized
 
-    if (!optimized.likelyReceipt) {
-      skipped.push({ file, reason: '영수증 영역을 찾지 못해 분석에서 제외됨' })
-      continue
+    try {
+      optimized = await optimizeReceiptImage(file)
+    } catch {
+      optimized = { file, fingerprint: '', likelyReceipt: false, cropAreaRatio: 1 }
     }
 
+    const fingerprint = optimized.fingerprint || `${file.name}-${file.size}-${file.lastModified}`
     const duplicate = seenFingerprints.some(
-      (item) => getHashDistance(item.fingerprint, optimized.fingerprint) <= 12,
+      (item) => getHashDistance(item.fingerprint, fingerprint) <= 12,
     )
 
     if (duplicate) {
@@ -280,18 +282,18 @@ export async function prepareReceiptUploads(files) {
       continue
     }
 
-    seenFingerprints.push({ fingerprint: optimized.fingerprint })
+    seenFingerprints.push({ fingerprint })
     prepared.push({
       originalFile: file,
-      optimizedFile: optimized.file,
-      fingerprint: optimized.fingerprint,
-      cropAreaRatio: optimized.cropAreaRatio,
+      optimizedFile: optimized.file || file,
+      fingerprint,
+      cropAreaRatio: optimized.cropAreaRatio || 1,
+      needsVisionFallback: !optimized.likelyReceipt,
     })
   }
 
   return { prepared, skipped }
 }
-
 export async function fileToBase64(file) {
   const arrayBuffer = await file.arrayBuffer()
   let binary = ''

@@ -147,22 +147,25 @@ export default function UploadPage() {
       return
     }
 
-    const { prepared, skipped } = await prepareReceiptUploads(nextFiles)
-    const nextUploads = prepared.map((entry, index) =>
-      createUploadEntry(entry.originalFile, index, entry.optimizedFile),
-    )
+    try {
+      const { prepared, skipped } = await prepareReceiptUploads(nextFiles)
+      const nextUploads = prepared.map((entry, index) =>
+        createUploadEntry(entry.originalFile, index, entry.optimizedFile),
+      )
 
-    setUploads(nextUploads)
+      setUploads(nextUploads)
 
-    if (!nextUploads.length) {
-      setMessage(skipped[0]?.reason || '분석 가능한 영수증 사진이 없습니다.')
-      return
+      if (!nextUploads.length) {
+        setMessage(skipped[0]?.reason || '분석 가능한 영수증 사진이 없습니다.')
+        return
+      }
+
+      const skippedMessage = skipped.length ? ` / 제외 ${skipped.length}장` : ''
+      setMessage(`${nextUploads.length}장 선택됨${skippedMessage}. 분석 버튼을 눌러 진행하세요.`)
+    } catch {
+      setUploads(nextFiles.map((file, index) => createUploadEntry(file, index)))
+      setMessage(`${nextFiles.length}장 선택됨. 전처리를 건너뛰고 분석 버튼을 눌러 진행하세요.`)
     }
-
-    const skippedMessage = skipped.length
-      ? ` / 제외 ${skipped.length}장`
-      : ''
-    setMessage(`${nextUploads.length}장 선택됨${skippedMessage}. 분석 버튼을 눌러 진행하세요.`)
   }
 
   function updateItem(uploadId, itemIndex, field, value) {
