@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReceipt } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
 import { buildBakeryComputation } from '../lib/bakeryMatcher'
@@ -16,105 +16,197 @@ function emptyItem() {
   return { name: '', qty: 1, amount: '' }
 }
 
+function createUploadEntry(file, index) {
+  return {
+    id: `${file.name}-${file.lastModified}-${index}`,
+    file,
+    previewUrl: URL.createObjectURL(file),
+    orderTotal: '',
+    note: '',
+    items: [emptyItem()],
+    parsedReceipt: null,
+    autoFilled: {
+      source: 'manual',
+      orderedDate: todayString(),
+      confidence: 0,
+    },
+    status: 'idle',
+    error: '',
+  }
+}
+
 export default function UploadPage() {
-  const [file, setFile] = useState(null)
-  const [source, setSource] = useState('coupang-eats')
-  const [orderedDate, setOrderedDate] = useState(todayString())
-  const [orderTotal, setOrderTotal] = useState('')
-  const [note, setNote] = useState('')
-  const [items, setItems] = useState([emptyItem()])
+  const [uploads, setUploads] = useState([])
   const [products, setProducts] = useState([])
   const [saving, setSaving] = useState(false)
   const [autoReading, setAutoReading] = useState(false)
   const [message, setMessage] = useState('')
-  const [parsedReceipt, setParsedReceipt] = useState(null)
+  const uploadsRef = useRef([])
 
   useEffect(() => {
     const unsub = listenProducts(setProducts)
     return () => unsub?.()
   }, [])
 
-  const previewUrl = useMemo(() => {
-    if (!file) return ''
-    return URL.createObjectURL(file)
-  }, [file])
+  useEffect(() => {
+    uploadsRef.current = uploads
+  }, [uploads])
 
-  const computed = useMemo(() => {
-    return buildBakeryComputation(items, products)
-  }, [items, products])
+  useEffect(() => {
+    return () => {
+      for (const entry of uploadsRef.current) {
+        URL.revokeObjectURL(entry.previewUrl)
+      }
+    }
+  }, [])
 
-  function updateItem(index, field, value) {
-    setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+  const totalSelected = uploads.length
+  const totalParsed = uploads.filter((entry) => entry.parsedReceipt).length
+
+  const summary = useMemo(() => {
+    return uploads.reduce(
+      (acc, entry) => {
+        const computed = buildBakeryComputation(entry.items, products)
+        acc.orderTotal += Number(entry.orderTotal || 0)
+        acc.bakeryTotal += computed.bakeryTotal
+        return acc
+      },
+      { orderTotal: 0, bakeryTotal: 0 },
+    )
+  }, [products, uploads])
+
+  function patchUpload(id, updater) {
+    setUploads((prev) => prev.map((entry) => (entry.id === id ? updater(entry) : entry)))
+  }
+
+  function handleFileChange(event) {
+    const nextFiles = Array.from(event.target.files || [])
+    setUploads((prev) => {
+      for (const entry of prev) {
+        URL.revokeObjectURL(entry.previewUrl)
+      }
+      return nextFiles.map((file, index) => createUploadEntry(file, index))
+    })
+    setMessage(nextFiles.length ? `${nextFiles.length}장 선택됨` : '')
+  }
+
+  function updateItem(uploadId, itemIndex, field, value) {
+    patchUpload(uploadId, (entry) => ({
+      ...entry,
+      items: entry.items.map((item, index) =>
+        index === itemIndex ? { ...item, [field]: value } : item,
+      ),
+    }))
+  }
+
+  function addItemRow(uploadId) {
+    patchUpload(uploadId, (entry) => ({
+      ...entry,
+      items: [...entry.items, emptyItem()],
+    }))
+  }
+
+  function removeItemRow(uploadId, itemIndex) {
+    patchUpload(uploadId, (entry) => ({
+      ...entry,
+      items:
+        entry.items.length === 1
+          ? [emptyItem()]
+          : entry.items.filter((_, index) => index !== itemIndex),
+    }))
+  }
+
+  function removeUpload(uploadId) {
+    setUploads((prev) =>
+      prev.filter((entry) => {
+        if (entry.id === uploadId) {
+          URL.revokeObjectURL(entry.previewUrl)
+          return false
+        }
+        return true
+      }),
     )
   }
 
-  function addItemRow() {
-    setItems((prev) => [...prev, emptyItem()])
-  }
-
-  function removeItemRow(index) {
-    setItems((prev) => {
-      if (prev.length === 1) return [emptyItem()]
-      return prev.filter((_, i) => i !== index)
-    })
-  }
-
   async function handleAutoRead() {
-    if (!file) return
+    if (!uploads.length) return
     setAutoReading(true)
     setMessage('')
 
-    try {
-      const parsed = await parseReceiptImage(file)
-      const filled = buildAutofillStateFromParsed(parsed, products)
-      setParsedReceipt(parsed)
+    let successCount = 0
 
-      if (filled.source) setSource(filled.source)
-      if (filled.orderedDate) setOrderedDate(filled.orderedDate)
-      if (filled.orderTotal) setOrderTotal(String(filled.orderTotal))
-      if (filled.items?.length) setItems(filled.items)
-      if (filled.note) setNote(filled.note)
+    for (const current of uploads) {
+      patchUpload(current.id, (entry) => ({ ...entry, status: 'reading', error: '' }))
 
-      setMessage(`자동 읽기 완료 (신뢰도 ${Math.round((filled.confidence || 0) * 100)}%)`)
-    } catch (err) {
-      console.error(err)
-      setParsedReceipt(null)
-      setMessage(err?.message || '자동 읽기 실패')
-    } finally {
-      setAutoReading(false)
+      try {
+        const parsed = await parseReceiptImage(current.file)
+        const filled = buildAutofillStateFromParsed(parsed, products)
+
+        patchUpload(current.id, (entry) => ({
+          ...entry,
+          parsedReceipt: parsed,
+          orderTotal: filled.orderTotal ? String(filled.orderTotal) : entry.orderTotal,
+          note: filled.note || entry.note,
+          items: filled.items?.length ? filled.items : entry.items,
+          autoFilled: {
+            source: filled.source || 'manual',
+            orderedDate: filled.orderedDate || todayString(),
+            confidence: filled.confidence || 0,
+          },
+          status: 'done',
+          error: '',
+        }))
+        successCount += 1
+      } catch (error) {
+        patchUpload(current.id, (entry) => ({
+          ...entry,
+          parsedReceipt: null,
+          status: 'error',
+          error: error?.message || '자동 읽기 실패',
+        }))
+      }
     }
+
+    setMessage(`자동 읽기 완료 ${successCount}/${uploads.length}`)
+    setAutoReading(false)
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
+  async function handleSubmit(event) {
+    event.preventDefault()
+    if (!uploads.length) return
+
     setSaving(true)
     setMessage('')
 
     try {
       await Promise.race([
-        createReceipt({
-          source,
-          imageName: file?.name || '',
-          orderedDate,
-          orderTotal,
-          bakeryTotal: computed.bakeryTotal,
-          bakeryBreakdown: computed.bakeryBreakdown,
-          items: computed.items,
-          note,
-        }),
+        Promise.all(
+          uploads.map((entry) => {
+            const computed = buildBakeryComputation(entry.items, products)
+
+            return createReceipt({
+              source: entry.autoFilled.source || 'manual',
+              imageName: entry.file?.name || '',
+              orderedDate: entry.autoFilled.orderedDate || todayString(),
+              orderTotal: entry.orderTotal,
+              bakeryTotal: computed.bakeryTotal,
+              bakeryBreakdown: computed.bakeryBreakdown,
+              items: computed.items,
+              note: entry.note,
+            })
+          }),
+        ),
         new Promise((_, reject) => setTimeout(() => reject(new Error('저장 시간 초과')), 10000)),
       ])
 
-      setFile(null)
-      setOrderTotal('')
-      setNote('')
-      setItems([emptyItem()])
-      setParsedReceipt(null)
-      setMessage('저장 완료')
-    } catch (err) {
-      console.error(err)
-      setMessage(err?.message || '저장 실패')
+      for (const entry of uploads) {
+        URL.revokeObjectURL(entry.previewUrl)
+      }
+      setUploads([])
+      setMessage(`${totalSelected}건 저장 완료`)
+    } catch (error) {
+      console.error(error)
+      setMessage(error?.message || '저장 실패')
     } finally {
       setSaving(false)
     }
@@ -127,192 +219,215 @@ export default function UploadPage() {
       <form className="card form" onSubmit={handleSubmit}>
         <label>
           사진 선택
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
+          <input type="file" accept="image/*" multiple onChange={handleFileChange} />
         </label>
 
-        {previewUrl && (
-          <div className="previewWrap">
-            <img src={previewUrl} alt="preview" className="preview" />
-          </div>
-        )}
+        <div className="card nestedCard uploadSummary">
+          <p>선택 사진: {totalSelected}장</p>
+          <p>자동 읽기 완료: {totalParsed}장</p>
+          <p>
+            총 주문금액: <strong>{summary.orderTotal.toLocaleString()}원</strong>
+          </p>
+          <p>
+            베이커리 합계: <strong>{summary.bakeryTotal.toLocaleString()}원</strong>
+          </p>
+        </div>
 
-        <button type="button" onClick={handleAutoRead} disabled={!file || autoReading}>
-          {autoReading ? '자동 읽는 중...' : '사진 자동 읽기'}
-        </button>
+        <div className="batchActions">
+          <button type="button" onClick={handleAutoRead} disabled={!uploads.length || autoReading}>
+            {autoReading ? '자동 읽는 중...' : '선택한 사진 자동 읽기'}
+          </button>
 
-        {parsedReceipt && (
-          <div className="card nestedCard parseResult">
-            <h3>자동 읽기 결과</h3>
-            <div className="parseGrid">
-              <div>
-                <strong>출처</strong>
-                <p>{parsedReceipt.source || '-'}</p>
-              </div>
-              <div>
-                <strong>문서 유형</strong>
-                <p>{parsedReceipt.documentType || '-'}</p>
-              </div>
-              <div>
-                <strong>주문일</strong>
-                <p>{parsedReceipt.orderedDate || '-'}</p>
-              </div>
-              <div>
-                <strong>주문금액</strong>
-                <p>
-                  {typeof parsedReceipt.orderTotal === 'number'
-                    ? parsedReceipt.orderTotal.toLocaleString()
-                    : parsedReceipt.orderTotal || '-'}
-                </p>
-              </div>
-              <div>
-                <strong>총액 라벨</strong>
-                <p>{parsedReceipt.totalLabel || '-'}</p>
-              </div>
-              <div>
-                <strong>신뢰도</strong>
-                <p>{Math.round((parsedReceipt.confidence || 0) * 100)}%</p>
-              </div>
-            </div>
+          <button type="submit" disabled={!uploads.length || saving}>
+            {saving ? '저장 중...' : `${totalSelected || 0}건 저장`}
+          </button>
+        </div>
 
-            <div>
-              <strong>추출 품목</strong>
-              {parsedReceipt.items?.length ? (
-                <ul className="miniList compactList">
-                  {parsedReceipt.items.map((item, index) => (
-                    <li key={`${item.name}-${index}`}>
-                      {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
-                      {item.isOption ? ' / 옵션' : ''}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>추출된 품목이 없습니다.</p>
-              )}
-            </div>
-          </div>
-        )}
+        {uploads.length > 0 ? (
+          <div className="uploadList">
+            {uploads.map((entry, uploadIndex) => {
+              const computed = buildBakeryComputation(entry.items, products)
 
-        <label>
-          채널
-          <select value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="coupang-eats">쿠팡이츠</option>
-            <option value="baemin">배민</option>
-            <option value="naver-order">네이버주문</option>
-            <option value="store-receipt">매장 영수증</option>
-          </select>
-        </label>
+              return (
+                <div key={entry.id} className="card nestedCard uploadCard">
+                  <div className="uploadCardHeader">
+                    <div>
+                      <h3>
+                        {uploadIndex + 1}. {entry.file.name}
+                      </h3>
+                      <p className="subtleText">
+                        추정 채널 {entry.autoFilled.source || 'manual'} / 주문일{' '}
+                        {entry.autoFilled.orderedDate || todayString()}
+                      </p>
+                    </div>
+                    <button type="button" className="ghostButton" onClick={() => removeUpload(entry.id)}>
+                      제거
+                    </button>
+                  </div>
 
-        <label>
-          주문일
-          <input type="date" value={orderedDate} onChange={(e) => setOrderedDate(e.target.value)} />
-        </label>
+                  <div className="previewWrap multiPreviewWrap">
+                    <img src={entry.previewUrl} alt={entry.file.name} className="preview" />
+                  </div>
 
-        <label>
-          주문금액
-          <input
-            type="number"
-            inputMode="numeric"
-            value={orderTotal}
-            onChange={(e) => setOrderTotal(e.target.value)}
-            placeholder="예: 15300"
-          />
-        </label>
+                  {entry.parsedReceipt && (
+                    <div className="card nestedCard parseResult">
+                      <h3>자동 읽기 결과</h3>
+                      <div className="parseGrid">
+                        <div>
+                          <strong>문서 유형</strong>
+                          <p>{entry.parsedReceipt.documentType || '-'}</p>
+                        </div>
+                        <div>
+                          <strong>주문금액</strong>
+                          <p>
+                            {typeof entry.parsedReceipt.orderTotal === 'number'
+                              ? entry.parsedReceipt.orderTotal.toLocaleString()
+                              : entry.parsedReceipt.orderTotal || '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <strong>총액 라벨</strong>
+                          <p>{entry.parsedReceipt.totalLabel || '-'}</p>
+                        </div>
+                        <div>
+                          <strong>신뢰도</strong>
+                          <p>{Math.round((entry.autoFilled.confidence || 0) * 100)}%</p>
+                        </div>
+                      </div>
 
-        <div className="itemSection">
-          <div className="itemHeader">
-            <h3>품목 입력</h3>
-            <button type="button" onClick={addItemRow}>
-              + 품목 추가
-            </button>
-          </div>
+                      <div>
+                        <strong>추출 품목</strong>
+                        {entry.parsedReceipt.items?.length ? (
+                          <ul className="miniList compactList">
+                            {entry.parsedReceipt.items.map((item, index) => (
+                              <li key={`${item.name}-${index}`}>
+                                {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
+                                {item.isOption ? ' / 옵션' : ''}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>추출된 품목이 없습니다.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-          {items.map((item, index) => {
-            const matched = buildBakeryComputation([item], products).items[0]
-
-            return (
-              <div key={index} className="itemRowCard">
-                <label>
-                  품목명
-                  <input
-                    value={item.name}
-                    onChange={(e) => updateItem(index, 'name', e.target.value)}
-                    placeholder="예: 에그타르트"
-                  />
-                </label>
-
-                <div className="itemRowGrid">
-                  <label>
-                    수량
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.qty}
-                      onChange={(e) => updateItem(index, 'qty', e.target.value)}
-                    />
-                  </label>
+                  {entry.error && <p className="message errorMessage">{entry.error}</p>}
 
                   <label>
-                    금액
+                    주문금액
                     <input
                       type="number"
                       inputMode="numeric"
-                      value={item.amount}
-                      onChange={(e) => updateItem(index, 'amount', e.target.value)}
-                      placeholder="예: 3500"
+                      value={entry.orderTotal}
+                      onChange={(e) =>
+                        patchUpload(entry.id, (current) => ({
+                          ...current,
+                          orderTotal: e.target.value,
+                        }))
+                      }
+                      placeholder="예: 15300"
+                    />
+                  </label>
+
+                  <div className="itemSection">
+                    <div className="itemHeader">
+                      <h3>품목 입력</h3>
+                      <button type="button" onClick={() => addItemRow(entry.id)}>
+                        + 품목 추가
+                      </button>
+                    </div>
+
+                    {entry.items.map((item, index) => {
+                      const matched = buildBakeryComputation([item], products).items[0]
+
+                      return (
+                        <div key={`${entry.id}-${index}`} className="itemRowCard">
+                          <label>
+                            품목명
+                            <input
+                              value={item.name}
+                              onChange={(e) => updateItem(entry.id, index, 'name', e.target.value)}
+                              placeholder="예: 에그타르트"
+                            />
+                          </label>
+
+                          <div className="itemRowGrid">
+                            <label>
+                              수량
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.qty}
+                                onChange={(e) => updateItem(entry.id, index, 'qty', e.target.value)}
+                              />
+                            </label>
+
+                            <label>
+                              금액
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                value={item.amount}
+                                onChange={(e) => updateItem(entry.id, index, 'amount', e.target.value)}
+                                placeholder="예: 3500"
+                              />
+                            </label>
+                          </div>
+
+                          <div className="itemMatch">
+                            {matched?.isBakery ? (
+                              <span className="tag bakery">베이커리 매칭: {matched.matchedBakeryName}</span>
+                            ) : (
+                              <span className="tag normal">베이커리 아님</span>
+                            )}
+                          </div>
+
+                          <button type="button" onClick={() => removeItemRow(entry.id, index)}>
+                            삭제
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="card nestedCard">
+                    <h3>자동 계산</h3>
+                    <p>
+                      베이커리 합계: <strong>{computed.bakeryTotal.toLocaleString()}원</strong>
+                    </p>
+                    {computed.bakeryBreakdown.length > 0 ? (
+                      <ul className="miniList">
+                        {computed.bakeryBreakdown.map((item) => (
+                          <li key={`${entry.id}-${item.name}`}>
+                            {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>매칭된 베이커리 품목이 없습니다.</p>
+                    )}
+                  </div>
+
+                  <label>
+                    메모
+                    <textarea
+                      value={entry.note}
+                      onChange={(e) =>
+                        patchUpload(entry.id, (current) => ({
+                          ...current,
+                          note: e.target.value,
+                        }))
+                      }
+                      placeholder="예: 디카페인 옵션은 베이커리 제외"
                     />
                   </label>
                 </div>
-
-                <div className="itemMatch">
-                  {matched?.isBakery ? (
-                    <span className="tag bakery">베이커리 매칭: {matched.matchedBakeryName}</span>
-                  ) : (
-                    <span className="tag normal">베이커리 아님</span>
-                  )}
-                </div>
-
-                <button type="button" onClick={() => removeItemRow(index)}>
-                  삭제
-                </button>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="card nestedCard">
-          <h3>자동 계산</h3>
-          <p>
-            베이커리 합계: <strong>{computed.bakeryTotal.toLocaleString()}원</strong>
-          </p>
-          {computed.bakeryBreakdown.length > 0 ? (
-            <ul className="miniList">
-              {computed.bakeryBreakdown.map((item) => (
-                <li key={item.name}>
-                  {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>매칭된 베이커리 품목이 없습니다.</p>
-          )}
-        </div>
-
-        <label>
-          메모
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="예: 디카페인 옵션은 베이커리 제외"
-          />
-        </label>
-
-        <button type="submit" disabled={saving}>
-          {saving ? '저장 중...' : '저장'}
-        </button>
+              )
+            })}
+          </div>
+        ) : null}
 
         {message && <p className="message">{message}</p>}
       </form>

@@ -161,6 +161,53 @@ button:disabled {
   background: #f8fafc;
 }
 
+.uploadSummary {
+  display: grid;
+  gap: 6px;
+}
+
+.uploadSummary p,
+.subtleText {
+  margin: 0;
+}
+
+.subtleText {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.batchActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.uploadList {
+  display: grid;
+  gap: 16px;
+}
+
+.uploadCard {
+  display: grid;
+  gap: 14px;
+}
+
+.uploadCardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.uploadCardHeader h3 {
+  margin: 0 0 4px;
+}
+
+.ghostButton {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .miniList {
   margin: 8px 0 0;
   padding-left: 18px;
@@ -188,6 +235,10 @@ button:disabled {
 .previewWrap {
   display: flex;
   justify-content: center;
+}
+
+.multiPreviewWrap {
+  justify-content: flex-start;
 }
 
 .preview {
@@ -238,6 +289,10 @@ button {
   color: #0f766e;
 }
 
+.errorMessage {
+  color: #b91c1c;
+}
+
 .appFootnote {
   margin: 16px 4px 0;
   font-size: 12px;
@@ -269,6 +324,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .batchActions {
+    grid-template-columns: 1fr;
+  }
+
   .parseGrid {
     grid-template-columns: 1fr;
   }
@@ -276,6 +335,10 @@ button {
   .itemHeader {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .uploadCardHeader {
+    flex-direction: column;
   }
 
   .itemRowGrid {

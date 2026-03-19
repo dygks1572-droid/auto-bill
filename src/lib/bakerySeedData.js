@@ -1,3 +1,5 @@
+import { BAKERY_MENU, PRODUCT_CATALOG } from '../data/bakeryMenu'
+
 const product = (
   name,
   {
@@ -95,7 +97,7 @@ export const OPTION_NAMES = [
   '고르곤졸라 크림치즈',
 ]
 
-export const DEFAULT_PRODUCT_SEEDS = [
+const BASE_PRODUCT_SEEDS = [
   product('에그타르트', {
     aliases: ['에그 타르트', 'egg tart'],
     group: 'tart',
@@ -381,6 +383,53 @@ export const DEFAULT_PRODUCT_SEEDS = [
     optionLike: true,
   }),
 ]
+
+const catalogDerivedSeeds = PRODUCT_CATALOG.map((item) =>
+  product(item.name, {
+    aliases: item.aliases || [],
+    category: item.category || 'bakery',
+    group: item.category || 'default',
+    countInBakeryTotal: item.countInBakeryTotal !== false,
+  }),
+)
+
+const bakeryMenuDerivedSeeds = BAKERY_MENU.map((name) =>
+  product(name, {
+    aliases: [name.replace(/\s+/g, '')].filter((alias) => alias !== name),
+    category: 'bakery',
+    group: 'legacy-menu',
+    countInBakeryTotal: true,
+  }),
+)
+
+export const DEFAULT_PRODUCT_SEEDS = Array.from(
+  [...BASE_PRODUCT_SEEDS, ...catalogDerivedSeeds, ...bakeryMenuDerivedSeeds].reduce(
+    (map, item) => {
+      const key = item.name.replace(/\s+/g, '').toLowerCase()
+      const existing = map.get(key)
+
+      if (!existing) {
+        map.set(key, {
+          ...item,
+          aliases: [...new Set((item.aliases || []).filter(Boolean))],
+        })
+        return map
+      }
+
+      map.set(key, {
+        ...existing,
+        ...item,
+        aliases: [...new Set([...(existing.aliases || []), ...(item.aliases || [])].filter(Boolean))],
+        countInBakeryTotal:
+          item.countInBakeryTotal !== false || existing.countInBakeryTotal !== false,
+        reviewNeeded: existing.reviewNeeded || item.reviewNeeded || false,
+        optionLike: existing.optionLike || item.optionLike || false,
+      })
+      return map
+    },
+    new Map(),
+  ).values(),
+)
 
 export function getDefaultProductSeeds() {
   return [...DEFAULT_PRODUCT_SEEDS]

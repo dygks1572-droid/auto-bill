@@ -16,6 +16,25 @@ export function normalizeText(value) {
     .toLowerCase()
 }
 
+function resolveProducts(products) {
+  const source = Array.isArray(products) && products.length ? products : []
+  if (!source.length) return DEFAULT_PRODUCT_SEEDS
+
+  const merged = new Map()
+
+  for (const item of DEFAULT_PRODUCT_SEEDS) {
+    merged.set(normalizeText(item.name), item)
+  }
+
+  for (const item of source) {
+    const key = normalizeText(item?.name)
+    if (!key) continue
+    merged.set(key, item)
+  }
+
+  return Array.from(merged.values())
+}
+
 function normalizeKeepWords(value) {
   return String(value ?? '')
     .replace(/[^0-9a-zA-Z가-힣\s]/g, ' ')
@@ -54,7 +73,7 @@ export function isOptionLineName(rawName) {
 }
 
 export function buildCatalogIndex(products = DEFAULT_PRODUCT_SEEDS) {
-  return products.map((product) => {
+  return resolveProducts(products).map((product) => {
     const names = [product.name, ...(product.aliases || [])].filter(Boolean)
     return {
       ...product,
