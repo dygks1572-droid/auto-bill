@@ -221,7 +221,7 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
             {
               type: 'input_text',
               text:
-                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, option rows, prices, dates, totals, and labels. Keep item names readable and keep each visible receipt row on its own line when possible. No explanation.',
+                'Transcribe this Korean receipt into plain text lines only. Preserve line breaks, product rows, option rows, prices, dates, totals, and labels. Keep item names readable, preserve each visible receipt row on its own line when possible, and read faint or low-contrast text carefully. No explanation.',
             },
           ],
         },
@@ -231,13 +231,13 @@ async function requestOcrText(env, { imageBase64, mimeType, fileName }) {
             { type: 'input_text', text: `OCR receipt image ${fileName}.` },
             {
               type: 'input_image',
-              detail: 'low',
+              detail: 'high',
               image_url: `data:${mimeType};base64,${imageBase64}`,
             },
           ],
         },
       ],
-      max_output_tokens: 1400,
+      max_output_tokens: 1600,
     }),
   })
 
@@ -275,7 +275,7 @@ async function requestStructuredParse(env, { imageBase64, mimeType, fileName, oc
 
   userContent.push({
     type: 'input_image',
-    detail: env.OPENAI_IMAGE_DETAIL || 'auto',
+    detail: env.OPENAI_IMAGE_DETAIL || 'high',
     image_url: `data:${mimeType};base64,${imageBase64}`,
   })
 

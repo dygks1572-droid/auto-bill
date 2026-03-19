@@ -1,13 +1,13 @@
 import { buildBakeryComputation } from './bakeryMatcher'
 
 const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-receipt'
-const MAX_RECEIPT_EDGE = 1850
-const RECEIPT_JPEG_QUALITY = 0.84
-const ANALYSIS_MAX_EDGE = 1800
+const MAX_RECEIPT_EDGE = 2200
+const RECEIPT_JPEG_QUALITY = 0.9
+const ANALYSIS_MAX_EDGE = 2100
 const BACKGROUND_THRESHOLD = 28
 const MIN_CROP_AREA_RATIO = 0.18
 const MAX_CROP_AREA_RATIO = 0.9
-const CROP_PADDING = 28
+const CROP_PADDING = 40
 const HASH_SIZE = 16
 
 function loadImageElement(file) {
@@ -222,7 +222,7 @@ function drawOptimizedReceipt(image) {
 
   const detectedBounds = detectReceiptBounds(analysisCanvas)
   const safeBounds =
-    detectedBounds && detectedBounds.cropAreaRatio >= 0.28 && detectedBounds.cropAreaRatio <= 0.82
+    detectedBounds && detectedBounds.cropAreaRatio >= 0.22 && detectedBounds.cropAreaRatio <= 0.88
       ? detectedBounds
       : null
   const sourceBounds = safeBounds || { left: 0, top: 0, width: analysisWidth, height: analysisHeight }
@@ -235,7 +235,7 @@ function drawOptimizedReceipt(image) {
   const sourceHeight = Math.min(height - sourceTop, Math.round(sourceBounds.height * cropScaleY))
 
   const croppedMaxEdge = Math.max(sourceWidth, sourceHeight)
-  const targetEdge = safeBounds ? MAX_RECEIPT_EDGE : Math.max(MAX_RECEIPT_EDGE, 2000)
+  const targetEdge = safeBounds ? MAX_RECEIPT_EDGE : Math.max(MAX_RECEIPT_EDGE, 2400)
   const outputScale = Math.min(1, targetEdge / croppedMaxEdge)
   const outputWidth = Math.max(1, Math.round(sourceWidth * outputScale))
   const outputHeight = Math.max(1, Math.round(sourceHeight * outputScale))
