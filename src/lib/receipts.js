@@ -1,8 +1,9 @@
 import {
-  addDoc,
   collection,
+  doc,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -26,10 +27,12 @@ function resolveReceiptDay(row) {
 }
 
 export async function createReceipt(payload) {
-  const uploadedDate = todayString()
-  const orderedDate = payload.orderedDate || uploadedDate
+  const [id] = await createReceiptsBatch([payload])
+  return id
+}
 
-  return addDoc(collection(db, RECEIPTS), {
+function normalizeReceiptPayload(payload, { uploadedDate, orderedDate }) {
+  return {
     source: payload.source || 'manual',
     imageName: payload.imageName || '',
     orderedDate,
@@ -41,7 +44,26 @@ export async function createReceipt(payload) {
     analysis: payload.analysis || null,
     note: payload.note || '',
     createdAt: serverTimestamp(),
-  })
+  }
+}
+
+export async function createReceiptsBatch(payloads) {
+  if (!Array.isArray(payloads) || !payloads.length) return []
+
+  const uploadedDate = todayString()
+  const batch = writeBatch(db)
+  const refs = []
+
+  for (const payload of payloads) {
+    const orderedDate = payload.orderedDate || uploadedDate
+    const ref = doc(collection(db, RECEIPTS))
+
+    batch.set(ref, normalizeReceiptPayload(payload, { uploadedDate, orderedDate }))
+    refs.push(ref.id)
+  }
+
+  await batch.commit()
+  return refs
 }
 
 export function listenReceiptsByDate(targetDate, callback) {

@@ -166,6 +166,54 @@ button:disabled {
   gap: 6px;
 }
 
+.uploadControlShell {
+  display: grid;
+  gap: 14px;
+}
+
+.uploadDropzone {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px dashed #94a3b8;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #eff6ff, #ecfeff);
+}
+
+.uploadDropzoneTitle {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.uploadDropzoneText {
+  color: #475569;
+  font-size: 14px;
+}
+
+.uploadOverviewGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.uploadMetricCard {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #dbe4ee;
+}
+
+.uploadMetricCard span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.uploadMetricCard strong {
+  font-size: 20px;
+}
+
 .uploadSummary p,
 .subtleText {
   margin: 0;
@@ -192,6 +240,47 @@ button:disabled {
   gap: 14px;
 }
 
+.uploadCardLayout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.uploadCardVisual {
+  display: grid;
+  gap: 12px;
+}
+
+.uploadQuickFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.uploadFact {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #dbe4ee;
+}
+
+.uploadFact span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.uploadFact strong {
+  font-size: 16px;
+}
+
+.uploadCardContent {
+  display: grid;
+  gap: 12px;
+}
+
 .uploadCardHeader {
   display: flex;
   justify-content: space-between;
@@ -201,6 +290,43 @@ button:disabled {
 
 .uploadCardHeader h3 {
   margin: 0 0 4px;
+}
+
+.uploadCardActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-idle {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.status-reading {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-error {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .ghostButton {
@@ -216,6 +342,10 @@ button:disabled {
 .parseResult {
   display: grid;
   gap: 14px;
+}
+
+.compactParseCard {
+  background: white;
 }
 
 .parseGrid {
@@ -352,7 +482,15 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .uploadOverviewGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .batchActions {
+    grid-template-columns: 1fr;
+  }
+
+  .uploadCardLayout {
     grid-template-columns: 1fr;
   }
 
@@ -371,6 +509,15 @@ button {
 
   .uploadCardHeader {
     flex-direction: column;
+  }
+
+  .uploadCardActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .uploadQuickFacts {
+    grid-template-columns: 1fr 1fr;
   }
 
   .itemRowGrid {
