@@ -19,6 +19,9 @@ export default function ProductsPage() {
   }, [])
 
   const catalogRows = buildCatalogIndex(rows)
+    .filter(
+      (row) => row.active !== false && row.category === 'bakery' && row.countInBakeryTotal !== false,
+    )
     .map((row) => ({
       ...row,
       aliases: row.rawNames.filter((alias) => alias !== row.name),

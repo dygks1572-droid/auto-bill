@@ -2,8 +2,11 @@ import { DEFAULT_PRODUCT_SEEDS, OPTION_NAMES } from './seedData.js'
 
 const MATCH_THRESHOLD = 72
 const SUGGESTION_THRESHOLD = 48
+const BAKERY_FALLBACK_THRESHOLD = 60
 const MAX_SUGGESTIONS = 3
 const LEARNED_ALIAS_STORAGE_KEY = 'bill.learned-bakery-aliases.v1'
+const BAKERY_NAME_HINT_PATTERN =
+  /(빵|식빵|타르트|케이크|쿠키|토스트|샌드위치|샌드|스콘|치아바타|바게트|크로와상|크루아상|깜빠뉴|깜파뉴|캄파뉴|휘낭시에|앙버터|잠봉|추러스|브레드)/
 const OCR_NAME_CORRECTIONS = [
   {
     target: '잠봉뵈르 샌드위치',
@@ -13,6 +16,10 @@ const OCR_NAME_CORRECTIONS = [
       /^장봉.*세드위치$/,
       /^잠봉.*세드위치$/,
       /^장별블랙.*$/,
+      /^볼블렌드.*샌드위치$/,
+      /^볼블랜드.*샌드위치$/,
+      /^볼블렌드샌드위치$/,
+      /^볼블랜드샌드위치$/,
       /^볼빈.*스딩워치$/,
       /^볼빈스딩워치$/,
       /^볼빈.*샌드위치$/,
@@ -46,6 +53,12 @@ const OCR_NAME_CORRECTIONS = [
       /^호두그래백리깜빠뉘$/,
       /^호두그래백리.*$/,
       /^홍두그래백리.*$/,
+      /^홍두그랙배리깜빠뉴$/,
+      /^홍두그랙배리깜파뉴$/,
+      /^홍두그랙배리.*$/,
+      /^호두그랙배리깜빠뉴$/,
+      /^호두그랙배리깜파뉴$/,
+      /^호두그랙배리.*$/,
       /^호두그랜베리깜빠뉴$/,
       /^호두그랜베리깜파뉴$/,
       /^호두크랜베리깜빠뉴$/,
@@ -87,10 +100,11 @@ function parseNumber(value, fallback = 0) {
 function normalizeBakeryVariants(value) {
   return String(value ?? '')
     .replace(/잠봉\s*뵈르|잠봉뵈르|잠봉보에르|잠봉브외르|잠봉베르|잠봉뵈어/gi, '잠봉뵈르')
+    .replace(/볼블렌드|볼블랜드/gi, '잠봉뵈르')
     .replace(/샌드윗치|샌드위치|샌드위티|샌드위/gi, '샌드위치')
     .replace(/홍두|호도/gi, '호두')
     .replace(/깜파뉴|캄파뉴|캄빠뉴|깜빠뉘|깜빠뉴/gi, '깜빠뉴')
-    .replace(/그래백리|그래배리|그랜베리|크랜배리|크렌베리|크렌배리|크래베리/gi, '크랜베리')
+    .replace(/그래백리|그래배리|그랙배리|그랜베리|크랜배리|크렌베리|크렌배리|크래베리/gi, '크랜베리')
     .replace(/이즈드랍|이지드립|이즈 드립/gi, '이즈드립')
 }
 
@@ -193,7 +207,27 @@ function resolveProducts(products) {
   for (const item of source) {
     const key = normalizeText(item?.name)
     if (!key) continue
-    merged.set(key, item)
+
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, item)
+      continue
+    }
+
+    const keepDefaultCategory = existing.category === 'bakery' && item.category !== 'bakery'
+    merged.set(
+      key,
+      keepDefaultCategory
+        ? {
+            ...existing,
+            aliases: mergeAliases(existing.aliases, item.aliases),
+          }
+        : {
+            ...existing,
+            ...item,
+            aliases: mergeAliases(existing.aliases, item.aliases),
+          },
+    )
   }
 
   return Array.from(merged.values()).map((item) => ({
@@ -310,14 +344,56 @@ export function isOptionLineName(rawName) {
 }
 
 export function buildCatalogIndex(products = DEFAULT_PRODUCT_SEEDS) {
-  return resolveProducts(products).map((product) => {
-    const names = [product.name, ...(product.aliases || [])].filter(Boolean)
+  return resolveProducts(products)
+    .filter((product) => product?.active !== false)
+    .map((product) => {
+      const names = [product.name, ...(product.aliases || [])].filter(Boolean)
+      return {
+        ...product,
+        normalizedNames: names.map((name) => normalizeText(name)),
+        rawNames: names,
+      }
+    })
+}
+
+function hasBakeryNameHint(value) {
+  return BAKERY_NAME_HINT_PATTERN.test(String(value ?? ''))
+}
+
+function canPromoteMatchToBakery(candidate, rawName) {
+  if (!candidate) return false
+  if (candidate.category === 'bakery' && candidate.countInBakeryTotal !== false) return true
+
+  if (candidate.category === 'review') {
+    return hasBakeryNameHint(`${rawName} ${candidate.name}`)
+  }
+
+  return false
+}
+
+function resolveBakeryCandidate(rawName, matched, suggestions) {
+  if (canPromoteMatchToBakery(matched, rawName)) {
     return {
-      ...product,
-      normalizedNames: names.map((name) => normalizeText(name)),
-      rawNames: names,
+      candidate: matched,
+      promoted: matched.category !== 'bakery' || matched.countInBakeryTotal === false,
     }
-  })
+  }
+
+  const fallback = (suggestions || []).find(
+    (item) => item.score >= BAKERY_FALLBACK_THRESHOLD && canPromoteMatchToBakery(item, rawName),
+  )
+
+  if (!fallback) {
+    return {
+      candidate: matched,
+      promoted: false,
+    }
+  }
+
+  return {
+    candidate: fallback,
+    promoted: true,
+  }
 }
 
 function scoreCandidate(targetRaw, target, rawCandidate, normalizedName) {
@@ -417,6 +493,11 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
     const suggestions = (matched?.suggestions || rankCatalogCandidates(lookupName, products))
       .filter((item) => item.score >= SUGGESTION_THRESHOLD)
       .slice(0, MAX_SUGGESTIONS)
+    const { candidate: bakeryMatch, promoted: promotedToBakery } = resolveBakeryCandidate(
+      lookupName,
+      matched,
+      suggestions,
+    )
     const financierOption = isFinancierOptionLine(lookupName)
     const explicitOption = Boolean(raw?.isOption)
     const isOption = explicitOption || optionLine || financierOption || matched?.optionLike
@@ -456,10 +537,16 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
       continue
     }
 
-    const category = matched?.category || 'unknown'
-    const reviewNeeded = matched?.reviewNeeded || false
-    const countInBakeryTotal = matched
-      ? matched.countInBakeryTotal !== false || (countReviewNeeded && reviewNeeded)
+    const category = bakeryMatch
+      ? promotedToBakery
+        ? 'bakery'
+        : bakeryMatch.category
+      : 'unknown'
+    const reviewNeeded = promotedToBakery ? false : bakeryMatch?.reviewNeeded || false
+    const countInBakeryTotal = bakeryMatch
+      ? promotedToBakery
+        ? true
+        : bakeryMatch.countInBakeryTotal !== false || (countReviewNeeded && reviewNeeded)
       : false
 
     const row = {
@@ -471,14 +558,15 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
       optionCharge: 0,
       finalAmount: amount,
       isOption: false,
-      isMatched: Boolean(matched),
-      matchedCatalogName: matched?.name || null,
-      matchedBakeryName: matched?.name || null,
+      isMatched: Boolean(bakeryMatch),
+      matchedCatalogName: bakeryMatch?.name || null,
+      matchedBakeryName: bakeryMatch?.name || null,
       isBakery: countInBakeryTotal,
       category,
-      group: matched?.group || null,
+      group: bakeryMatch?.group || null,
       reviewNeeded,
       countInBakeryTotal,
+      promotedToBakery,
       options: [],
       suggestions,
     }
