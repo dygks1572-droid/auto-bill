@@ -500,7 +500,11 @@ export function buildBakeryComputation(rawItems, products = DEFAULT_PRODUCT_SEED
     )
     const financierOption = isFinancierOptionLine(lookupName)
     const explicitOption = Boolean(raw?.isOption)
-    const isOption = explicitOption || optionLine || financierOption || matched?.optionLike
+    const forceBakeryItem =
+      explicitOption && !optionLine && !financierOption && !matched?.optionLike && Boolean(bakeryMatch)
+    const isOption = forceBakeryItem
+      ? false
+      : explicitOption || optionLine || financierOption || matched?.optionLike
     const optionCharge = parseNumber(raw?.optionCharge, extractOptionCharge(lookupName, amount))
 
     if (isOption) {

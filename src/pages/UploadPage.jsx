@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReceiptsBatch, listenReceiptsByDate } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
 import { buildBakeryComputation, learnCatalogAlias } from '../lib/bakeryMatcher'
-import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
+import { buildAutofillStateFromParsed, normalizeAutoFilledItems, parseReceiptImage } from '../lib/receiptAutofillClient'
 
 function todayString() {
   const now = new Date()
@@ -311,8 +311,12 @@ export default function UploadPage() {
               const computed = buildBakeryComputation(entry.items, products)
               const itemCount = entry.items.filter((item) => item.name).length
               const parsedItems = entry.parsedReceipt?.items || []
-              const recognizedItemCount = parsedItems.filter((item) => item.name && !item.isOption).length
-              const recognizedOptionCount = parsedItems.filter((item) => item.isOption).length
+              const computedParsedItems = buildBakeryComputation(
+                normalizeAutoFilledItems(parsedItems),
+                products,
+              ).items
+              const recognizedItemCount = computedParsedItems.filter((item) => item.name && !item.isOption).length
+              const recognizedOptionCount = computedParsedItems.filter((item) => item.isOption).length
               const matchedBakeryCount = computed.bakeryBreakdown.length
               const amountGap = Number(entry.orderTotal || 0) - computed.bakeryTotal
 
@@ -420,13 +424,23 @@ export default function UploadPage() {
                               <strong>자동 추출 품목</strong>
                               <span>{parsedItems.length}줄</span>
                             </div>
-                            {parsedItems.length ? (
+                            {computedParsedItems.length ? (
                               <ul className="analysisLineList">
-                                {parsedItems.map((item, index) => (
+                                {computedParsedItems.map((item, index) => (
                                   <li key={`${item.name}-${index}`} className={item.isOption ? 'isOptionRow' : ''}>
                                     <div>
                                       <strong>{item.name}</strong>
-                                      <span>{item.isOption ? '옵션 행' : '일반 품목'}</span>
+                                      <span>
+                                        {item.isOption
+                                          ? item.matchedBakeryName
+                                            ? `옵션 행 / ${item.matchedBakeryName}`
+                                            : '옵션 행'
+                                          : item.isBakery
+                                            ? `매칭 베이커리 / ${item.matchedBakeryName || item.name}`
+                                            : item.suggestions?.length
+                                              ? '자동 매칭 후보 있음'
+                                              : '일반 품목'}
+                                      </span>
                                     </div>
                                     <div>
                                       <span>{item.qty}개</span>
