@@ -72,7 +72,7 @@ function normalizeName(value) {
 }
 
 function hasSuspiciousItems(items) {
-  const suspiciousPatterns = [/스딩워치/, /그래백리/, /깨비빔밥/, /이즈드랍/, /세드위치/]
+  const suspiciousPatterns = [/스딩워치/, /장볼빠른/, /그래백리/, /깨비빔밥/, /이즈드랍/, /세드위치/]
 
   return (items || []).some((item) => {
     const name = normalizeName(item?.name)
@@ -192,8 +192,8 @@ export async function onRequestPost(context) {
       'orderedDate must be YYYY-MM-DD or null.',
       'Preserve line-by-line row structure when visible.',
       'Prefer reading the exact printed Korean text over guessing similar words.',
-      'For long names (e.g., "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립"), do NOT abbreviate, cut, or hallucinate words (like 스딩워치, 세드위치, 깨비빔밥, 이즈드랍). Extract them exactly as printed including spaces.',
-      'Options starting with "+" or "ㄴ" (e.g., "ㄴ 이웃 블렌드(달콤)") must always be captured as separate rows with isOption=true, even if amount is 0. If no quantity is visible for the option, use qty=1.',
+      'For long names (e.g., "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립"), do NOT abbreviate, cut, or hallucinate words (like 스딩워치, 장볼빠른, 세드위치, 깨비빔밥, 이즈드랍). Extract them exactly as printed including spaces.',
+      'Regular main products MUST have isOption=false. ONLY set isOption=true for sub-options starting with "+" or "ㄴ" (e.g., "ㄴ 이웃 블렌드(달콤)"). even if amount is 0, they are options. If no quantity is visible for the option, use qty=1.',
       'When product names are hard to read, prefer the visible letters and spacing rather than replacing them with generic words.',
     ].join(' ')
 

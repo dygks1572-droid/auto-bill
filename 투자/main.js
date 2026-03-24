@@ -8,7 +8,7 @@ import {
 } from "./data/companies.js";
 import {
   fetchBatchQuotes,
-  fetchIntradayChart,
+  fetchDailyEodChart,
   fetchTranscript,
   fetchTranscriptDates,
 } from "./services/fmp.js";
@@ -23,7 +23,7 @@ const STORAGE_KEYS = {
 
 const DEMO_REFRESH_MS = 2600;
 const LIVE_REFRESH_MS = 45000;
-const CHART_CACHE_MS = 60000;
+const CHART_CACHE_MS = 1000 * 60 * 10;
 const TRANSCRIPT_CACHE_MS = 1000 * 60 * 60 * 6;
 
 const state = {
@@ -31,6 +31,7 @@ const state = {
   activeCompanyId: null,
   activeSector: "All",
   activeView: "grid",
+  activeChartRange: "1M",
   search: "",
   activeTab: "overview",
   activeSegmentId: null,
@@ -64,13 +65,13 @@ function createDefaultLiveState(apiKey = "") {
       enabled ? "idle" : "demo",
       enabled
         ? "실시간 quote 연결을 시작할 준비가 되어 있습니다."
-        : "API key를 넣으면 실시간 시세와 1분 차트로 전환됩니다."
+        : "API key를 넣으면 실시간 시세와 일봉 OHLC 차트로 전환됩니다."
     ),
     chart: createLiveChannel(
       enabled ? "idle" : "demo",
       enabled
-        ? "활성 기업의 1분 차트를 불러올 준비가 되어 있습니다."
-        : "활성 기업 차트는 데모 시계열을 사용 중입니다."
+        ? "활성 기업의 일봉 OHLC 차트를 불러올 준비가 되어 있습니다."
+        : "활성 기업 차트는 데모 일봉 시계열을 사용 중입니다."
     ),
     transcript: createLiveChannel(
       enabled ? "idle" : "demo",
@@ -100,17 +101,35 @@ function bootstrap() {
 }
 
 function hydrateCompanies(customCompanies) {
-  const clonedBase = structuredClone(baseCompanies).map((company) => ({
-    ...company,
-    isCustom: false,
-  }));
+  const clonedBase = structuredClone(baseCompanies).map((company) =>
+    prepareCompany({
+      ...company,
+      isCustom: false,
+    })
+  );
 
-  const clonedCustom = customCompanies.map((company) => ({
-    ...company,
-    isCustom: true,
-  }));
+  const clonedCustom = customCompanies.map((company) =>
+    prepareCompany({
+      ...company,
+      isCustom: true,
+    })
+  );
 
   return [...clonedBase, ...clonedCustom];
+}
+
+function prepareCompany(company) {
+  if (!company.price) return company;
+
+  if (!company.price.candles?.length) {
+    company.price.candles = buildCandlesFromSeries(
+      company.price.series ?? [],
+      `${company.id}-${company.ticker}`,
+      company.price.volatility ?? 0.8
+    );
+  }
+
+  return company;
 }
 
 function rehydrateCompanyState() {
@@ -192,6 +211,11 @@ function handleClick(event) {
     state.activeView = view;
     renderHeader();
     renderContent();
+  }
+
+  if (action === "set-chart-range" && view) {
+    state.activeChartRange = view;
+    renderDetail();
   }
 
   if (action === "set-sector" && sector) {
@@ -353,7 +377,7 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
 
   const peers = state.companies.filter((company) => company.sector === sector).slice(0, 3);
 
-  return {
+  return prepareCompany({
     id,
     name,
     ticker,
@@ -479,7 +503,7 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
         detail: "장기적으로 valuation re-rate를 만들 수 있는 선택지를 정리하세요.",
       },
     ],
-  };
+  });
 }
 
 function hashString(value) {
@@ -544,6 +568,11 @@ function tickCompanyPrice(company) {
   series.push({ label: nextLabel, value: nextValue });
   if (series.length > 14) series.shift();
   company.price.current = nextValue;
+  company.price.candles = buildCandlesFromSeries(
+    series,
+    `${company.id}-${company.ticker}`,
+    company.price.volatility ?? 0.8
+  );
 }
 
 function nextIntradayLabel(label) {
@@ -560,6 +589,11 @@ function nextIntradayLabel(label) {
 
 function updateLiveChannel(channel, status, message, syncedAt = null) {
   state.live[channel] = createLiveChannel(status, message, syncedAt);
+}
+
+function safeRenderHeader() {
+  if (document.activeElement?.matches?.("[data-role='search-input']")) return;
+  renderHeader();
 }
 
 function maybeFetchActiveCompanyLiveData({
@@ -596,7 +630,7 @@ async function syncMarketData({ force = false, silent = false } = {}) {
   }
 
   try {
-    const quotes = await fetchBatchQuotes(symbols, state.live.apiKey);
+    const { quotes, source } = await fetchBatchQuotes(symbols, state.live.apiKey);
 
     if (!quotes.length) {
       throw new Error("quote 응답이 비어 있습니다.");
@@ -608,17 +642,18 @@ async function syncMarketData({ force = false, silent = false } = {}) {
     state.companies.forEach((company) => {
       const quote = quoteMap.get(company.ticker.toUpperCase());
       if (!quote) return;
-      applyLiveQuote(company, quote, now);
+      applyLiveQuote(company, quote, now, source);
     });
 
     updateLiveChannel(
       "market",
       "live",
-      `${quotes.length}개 종목을 실시간 quote로 동기화했습니다.`,
+      `${quotes.length}/${symbols.length}개 종목을 실시간 quote로 동기화했습니다. source: ${source}.`,
       now
     );
 
     renderSidebar();
+    safeRenderHeader();
     renderContent();
     renderDetail();
   } catch (error) {
@@ -631,9 +666,10 @@ async function syncMarketData({ force = false, silent = false } = {}) {
   }
 }
 
-function applyLiveQuote(company, quote, syncedAt) {
+function applyLiveQuote(company, quote, syncedAt, source = "unknown") {
   company.liveQuote = {
     ...quote,
+    source,
     syncedAt,
   };
 
@@ -642,6 +678,11 @@ function applyLiveQuote(company, quote, syncedAt) {
 
     if (!company.liveChart?.series?.length) {
       company.price.series = injectLivePricePoint(company.price.series, quote.price);
+      company.price.candles = buildCandlesFromSeries(
+        company.price.series,
+        `${company.id}-${company.ticker}`,
+        company.price.volatility ?? 0.8
+      );
     }
   }
 }
@@ -677,35 +718,67 @@ async function syncActiveCompanyChart({ force = false, silent = false } = {}) {
     updateLiveChannel(
       "chart",
       "loading",
-      `${company.ticker} 1분 차트를 불러오는 중입니다.`
+      `${company.ticker} 일봉 OHLC 차트를 불러오는 중입니다.`
     );
     renderSidebar();
     renderDetail();
   }
 
   try {
-    const chartSeries = await fetchIntradayChart(company.ticker, state.live.apiKey, 48);
+    const chartSeries = await fetchDailyEodChart(company.ticker, state.live.apiKey, 220);
 
     if (!chartSeries.length) {
-      throw new Error("1분 차트 응답이 비어 있습니다.");
+      throw new Error("일봉 차트 응답이 비어 있습니다.");
     }
 
     const now = new Date().toISOString();
+    const normalizedCandles = chartSeries.map((point) => ({ ...point }));
+    const quote = company.liveQuote;
+
+    if (quote && normalizedCandles.length) {
+      const lastIndex = normalizedCandles.length - 1;
+      const lastBar = normalizedCandles[lastIndex];
+      const latestLabel = formatLatestDailyLabel();
+      normalizedCandles[lastIndex] = {
+        ...lastBar,
+        date: getTodayNyDate(),
+        label: latestLabel,
+        open: quote.open > 0 ? Number(quote.open.toFixed(2)) : lastBar.open,
+        high: quote.dayHigh > 0 ? Number(quote.dayHigh.toFixed(2)) : lastBar.high,
+        low: quote.dayLow > 0 ? Number(quote.dayLow.toFixed(2)) : lastBar.low,
+        close: quote.price > 0 ? Number(quote.price.toFixed(2)) : lastBar.close,
+        value: quote.price > 0 ? Number(quote.price.toFixed(2)) : lastBar.value,
+        volume: quote.volume > 0 ? quote.volume : lastBar.volume,
+      };
+    }
+
     company.liveChart = {
-      series: chartSeries,
+      series: normalizedCandles,
       syncedAt: now,
-      source: "FMP 1-Minute Chart",
+      source: "FMP Daily OHLC",
     };
-    company.price.series = chartSeries.map((point) => ({
+    company.price.series = normalizedCandles.map((point) => ({
       label: point.label,
-      value: point.value,
+      value: point.close,
     }));
-    company.price.current = chartSeries.at(-1)?.value ?? company.price.current;
+    company.price.candles = normalizedCandles.map((point) => ({
+      label: point.label,
+      open: point.open,
+      high: point.high,
+      low: point.low,
+      close: point.close,
+      volume: point.volume,
+      date: point.date,
+    }));
+    company.price.current =
+      company.liveQuote?.price ??
+      normalizedCandles.at(-1)?.value ??
+      company.price.current;
 
     updateLiveChannel(
       "chart",
       "live",
-      `${company.ticker} 1분 차트를 동기화했습니다.`,
+      `${company.ticker} 일봉 OHLC 차트를 동기화했습니다.`,
       now
     );
 
@@ -863,7 +936,7 @@ function renderSidebar() {
       <p class="muted">
         지금은 ${
           hasLiveApiKey() ? "FMP live mode" : "demo mode"
-        } 입니다. 시세는 공식 quote / 1분 차트 endpoint, 실적 분석은 earnings transcript endpoint를 사용하도록 연결했습니다.
+        } 입니다. 시세는 공식 quote, 차트는 daily OHLC endpoint, 실적 분석은 earnings transcript endpoint를 사용하도록 연결했습니다.
       </p>
       <div class="status-grid">
         ${renderStatus(
@@ -923,7 +996,7 @@ function renderSidebar() {
       <div class="api-helper">
         사용 endpoint:
         <code>batch-quote</code>,
-        <code>historical-chart/1min</code>,
+        <code>historical-price-eod/full</code>,
         <code>earning-call-transcript-dates</code>,
         <code>earning-call-transcript</code>
       </div>
@@ -1121,9 +1194,9 @@ function renderCompareTray() {
                   <button class="ghost-button small" data-action="toggle-compare" data-id="${company.id}">Remove</button>
                 </header>
                 <div class="compare-price-row">
-                  <div class="price-tag">$${company.price.current.toFixed(1)}</div>
+                  <div class="price-tag">${formatDisplayPrice(company.price.current, { live: Boolean(company.liveQuote) })}</div>
                   <div class="delta-tag ${priceDelta >= 0 ? "positive" : "negative"}">
-                    ${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(1)}%
+                    ${formatPercentValue(priceDelta)}
                   </div>
                 </div>
                 <div class="compare-metric-list">
@@ -1183,9 +1256,9 @@ function renderCardGrid(companies) {
                     <div class="ticker-line">${company.ticker} · ${company.marketCapLabel}</div>
                   </div>
                   <div class="price-cluster">
-                    <strong>$${company.price.current.toFixed(1)}</strong>
+                    <strong>${formatDisplayPrice(company.price.current, { live: Boolean(company.liveQuote) })}</strong>
                     <span class="${priceDelta >= 0 ? "positive" : "negative"}">
-                      ${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(1)}%
+                      ${formatPercentValue(priceDelta)}
                     </span>
                   </div>
                 </div>
@@ -1321,8 +1394,9 @@ function renderDetail() {
     company.segments.find((segment) => segment.id === state.activeSegmentId) ??
     company.segments[0];
   const priceDelta = getPriceDelta(company);
+  const displayCandles = getDisplayCandles(company, state.activeChartRange);
   const chartSource = company.liveChart
-    ? "FMP 1-minute chart"
+    ? "FMP daily OHLC chart"
     : company.liveQuote
       ? "Live quote fallback"
       : "Demo live feed";
@@ -1358,29 +1432,59 @@ function renderDetail() {
           <div class="hero-price-line">
             <div>
               <div class="eyebrow">${chartSource}</div>
-              <div class="hero-price">$${company.price.current.toFixed(1)}</div>
+              <div class="hero-price">${formatDisplayPrice(company.price.current, { live: Boolean(company.liveQuote) })}</div>
             </div>
             <div class="delta-tag ${priceDelta >= 0 ? "positive" : "negative"}">
-              ${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(1)}%
+              ${formatPercentValue(priceDelta)}
+            </div>
+          </div>
+          <div class="candle-toolbar">
+            <div class="candle-toolbar-left">
+              <div class="candle-symbol-pill">${company.ticker}</div>
+              <div class="moving-average-legend">
+                <span>이동평균</span>
+                <strong class="ma ma-5">5</strong>
+                <strong class="ma ma-20">20</strong>
+                <strong class="ma ma-60">60</strong>
+                <strong class="ma ma-120">120</strong>
+              </div>
+            </div>
+            <div class="candle-range-tabs">
+              ${[
+                { id: "1D", label: "1D" },
+                { id: "1W", label: "1W" },
+                { id: "1M", label: "1M" },
+                { id: "3M", label: "3M" },
+                { id: "ALL", label: "ALL" },
+              ]
+                .map(
+                  (range) => `
+                    <button
+                      class="candle-range-button ${state.activeChartRange === range.id ? "active" : ""}"
+                      data-action="set-chart-range"
+                      data-view="${range.id}"
+                    >
+                      ${range.label}
+                    </button>
+                  `
+                )
+                .join("")}
             </div>
           </div>
           <div class="chart-frame">
-            ${renderLineChart(company.price.series, {
-              compact: false,
-              stroke: "#3dd9a5",
-            })}
+            ${renderCandlestickChart(displayCandles, company)}
           </div>
           <p class="muted">
             ${
               company.liveChart
-                ? `${company.ticker} 1분 차트가 동기화되었습니다. ${
+                ? `${company.ticker} 캔들 차트가 동기화되었습니다. ${
                     company.liveChart.syncedAt
                       ? `마지막 업데이트 ${formatSyncTime(company.liveChart.syncedAt)}.`
                       : ""
                   }`
                 : hasLiveApiKey()
-                  ? "실시간 quote는 연결되어 있고, 1분 차트는 활성 기업 기준으로 순차 동기화됩니다."
-                  : "API key를 넣으면 현재 데모 차트 자리에 실시간 quote / 1분 차트가 들어옵니다."
+                  ? "실시간 quote와 OHLC 데이터를 이용해 캔들, 이동평균, 거래량 패널을 함께 표시합니다."
+                  : "API key를 넣으면 현재 데모 캔들 차트 자리에 실시간 OHLC / 거래량 데이터가 들어옵니다."
             }
           </p>
         </article>
@@ -1440,12 +1544,16 @@ function renderLiveSnapshot(company) {
 
   return `
     <div class="metric-row">
+      <span>Quote Source</span>
+      <strong>${company.liveQuote.source ?? "unknown"}</strong>
+    </div>
+    <div class="metric-row">
       <span>Day Range</span>
-      <strong>${formatMoneyValue(company.liveQuote.dayLow)} - ${formatMoneyValue(company.liveQuote.dayHigh)}</strong>
+      <strong>${formatMoneyValue(company.liveQuote.dayLow, { live: true })} - ${formatMoneyValue(company.liveQuote.dayHigh, { live: true })}</strong>
     </div>
     <div class="metric-row">
       <span>Open</span>
-      <strong>${formatMoneyValue(company.liveQuote.open)}</strong>
+      <strong>${formatMoneyValue(company.liveQuote.open, { live: true })}</strong>
     </div>
     <div class="metric-row">
       <span>Volume</span>
@@ -1838,6 +1946,301 @@ function buildVisibleLinks(companies) {
   return [...unique.values()];
 }
 
+function buildCandlesFromSeries(series, seedKey, volatility = 0.8) {
+  if (!series?.length) return [];
+
+  const seed = hashString(seedKey);
+  const candles = [];
+
+  series.forEach((point, index) => {
+    const previousClose = candles[index - 1]?.close ?? point.value * (0.985 + (seed % 9) / 1000);
+    const rawDrift = Math.sin((index + seed) / 2.7) * 0.012;
+    const open = Number((previousClose * (1 + rawDrift * 0.7)).toFixed(2));
+    const close = Number(point.value.toFixed(2));
+    const spanBase =
+      Math.max(Math.abs(close - open), close * 0.008) +
+      (volatility * (0.28 + ((seed + index) % 7) * 0.05));
+    const high = Number((Math.max(open, close) + spanBase * 0.72).toFixed(2));
+    const low = Number((Math.max(0.1, Math.min(open, close) - spanBase * 0.68)).toFixed(2));
+    const volume = Math.round(
+      8_500_000 +
+        index * 1_200_000 +
+        Math.abs(close - open) * 2_400_000 +
+        (((seed * (index + 3)) % 17) * 420_000)
+    );
+
+    candles.push({
+      label: point.label,
+      open,
+      high,
+      low,
+      close,
+      volume,
+      date: point.label,
+    });
+  });
+
+  return candles;
+}
+
+function getDisplayCandles(company, range) {
+  const isLiveMode = hasLiveApiKey();
+  const sourceCandles = isLiveMode
+    ? company.liveChart?.series?.length
+      ? company.liveChart.series
+      : []
+    : company.price.candles?.length
+      ? company.price.candles
+      : buildCandlesFromSeries(
+          company.price.series ?? [],
+          `${company.id}-${company.ticker}`,
+          company.price.volatility ?? 0.8
+        );
+
+  const rangeMap = {
+    "1D": 1,
+    "1W": 5,
+    "1M": 22,
+    "3M": 66,
+    ALL: 999,
+  };
+
+  const limit = rangeMap[range] ?? 28;
+  const sliced = sourceCandles.slice(-limit).map((candle) => ({ ...candle }));
+
+  if (!isLiveMode) return sliced;
+  return sliced;
+}
+
+function renderCandlestickChart(candles, company) {
+  if (!candles?.length) {
+    return `<div class="chart-empty">표시할 캔들 차트 데이터가 없습니다.</div>`;
+  }
+
+  const width = 900;
+  const height = 560;
+  const padding = { top: 22, right: 72, bottom: 42, left: 18 };
+  const volumeHeight = 118;
+  const gapHeight = 18;
+  const priceHeight = height - padding.top - padding.bottom - volumeHeight - gapHeight;
+  const priceBottom = padding.top + priceHeight;
+  const volumeTop = priceBottom + gapHeight;
+  const priceValues = candles.flatMap((candle) => [candle.high, candle.low]);
+  const maxPrice = Math.max(...priceValues);
+  const minPrice = Math.min(...priceValues);
+  const priceSpan = maxPrice - minPrice || 1;
+  const paddedMax = maxPrice + priceSpan * 0.08;
+  const paddedMin = Math.max(0, minPrice - priceSpan * 0.08);
+  const maxVolume = Math.max(...candles.map((candle) => candle.volume || 0), 1);
+  const innerWidth = width - padding.left - padding.right;
+  const slot = innerWidth / Math.max(candles.length, 1);
+  const candleWidth = Math.max(8, Math.min(30, slot * 0.58));
+  const lastClose = candles.at(-1)?.close ?? company.price.current;
+  const highest = candles.reduce(
+    (best, candle, index) => (candle.high > best.high ? { ...candle, index } : best),
+    { ...candles[0], index: 0 }
+  );
+  const lowest = candles.reduce(
+    (best, candle, index) => (candle.low < best.low ? { ...candle, index } : best),
+    { ...candles[0], index: 0 }
+  );
+
+  const xAt = (index) => padding.left + slot * index + slot / 2;
+  const priceY = (value) =>
+    padding.top + ((paddedMax - value) / (paddedMax - paddedMin || 1)) * priceHeight;
+  const volumeY = (value) => volumeTop + volumeHeight - (value / maxVolume) * volumeHeight;
+  const priceTicks = Array.from({ length: 6 }, (_, index) => {
+    const ratio = index / 5;
+    const value = paddedMax - (paddedMax - paddedMin) * ratio;
+    return {
+      y: padding.top + priceHeight * ratio,
+      value,
+    };
+  });
+  const volumeTicks = [0.25, 0.5, 0.75, 1].map((ratio) => ({
+    y: volumeTop + volumeHeight - volumeHeight * ratio,
+    value: maxVolume * ratio,
+  }));
+  const movingAverageConfigs = [
+    { period: 5, className: "ma-5", color: "#50c85b" },
+    { period: 20, className: "ma-20", color: "#ff5a5a" },
+    { period: 60, className: "ma-60", color: "#ff9d2e" },
+    { period: 120, className: "ma-120", color: "#ab6cff" },
+  ];
+  const movingAverages = movingAverageConfigs.map((config) => ({
+    ...config,
+    points: buildMovingAveragePoints(candles, config.period, xAt, priceY),
+  }));
+  const rightTagY = priceY(lastClose);
+  const rightTagColor =
+    lastClose >= (candles.at(-1)?.open ?? lastClose) ? "#e94444" : "#2a7df6";
+  const highDelta = ((lastClose - highest.high) / highest.high) * 100;
+  const lowDelta = ((lastClose - lowest.low) / lowest.low) * 100;
+
+  return `
+    <div class="candle-chart-shell">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${company.name} candlestick chart">
+        <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff" rx="18"></rect>
+        ${priceTicks
+          .map(
+            (tick) => `
+              <line x1="${padding.left}" y1="${tick.y}" x2="${width - padding.right}" y2="${tick.y}" class="candle-grid-line"></line>
+              <text x="${width - padding.right + 12}" y="${tick.y + 4}" class="candle-axis-label">${formatChartPrice(
+                tick.value
+              )}</text>
+            `
+          )
+          .join("")}
+        ${volumeTicks
+          .map(
+            (tick) => `
+              <line x1="${padding.left}" y1="${tick.y}" x2="${width - padding.right}" y2="${tick.y}" class="candle-volume-grid-line"></line>
+              <text x="${width - padding.right + 12}" y="${tick.y + 4}" class="candle-axis-label volume">${formatCompactNumber(
+                tick.value
+              )}</text>
+            `
+          )
+          .join("")}
+        ${candles
+          .map((candle, index) => {
+            const x = xAt(index);
+            const openY = priceY(candle.open);
+            const closeY = priceY(candle.close);
+            const highY = priceY(candle.high);
+            const lowY = priceY(candle.low);
+            const bodyTop = Math.min(openY, closeY);
+            const bodyHeight = Math.max(2.4, Math.abs(openY - closeY));
+            const isUp = candle.close >= candle.open;
+            const color = isUp ? "#f43434" : "#2179e3";
+            const volumeHeightValue = volumeTop + volumeHeight - volumeY(candle.volume || 0);
+            return `
+              <line x1="${x}" y1="${highY}" x2="${x}" y2="${lowY}" stroke="${color}" stroke-width="1.8"></line>
+              <rect x="${x - candleWidth / 2}" y="${bodyTop}" width="${candleWidth}" height="${bodyHeight}" fill="${color}" rx="1.8"></rect>
+              <rect
+                x="${x - candleWidth / 2}"
+                y="${volumeY(candle.volume || 0)}"
+                width="${candleWidth}"
+                height="${Math.max(4, volumeHeightValue)}"
+                fill="${isUp ? "rgba(244,52,52,0.46)" : "rgba(33,121,227,0.46)"}"
+              ></rect>
+            `;
+          })
+          .join("")}
+        ${movingAverages
+          .map((average) =>
+            average.points.length
+              ? `
+                  <path d="${average.points
+                    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+                    .join(" ")}" class="candle-moving-average ${average.className}" stroke="${average.color}"></path>
+                `
+              : ""
+          )
+          .join("")}
+        <line
+          x1="${width - padding.right - 18}"
+          y1="${rightTagY}"
+          x2="${width - padding.right + 6}"
+          y2="${rightTagY}"
+          stroke="${rightTagColor}"
+          stroke-width="2"
+        ></line>
+        <path
+          d="M ${width - padding.right + 10} ${rightTagY} L ${width - padding.right + 28} ${rightTagY - 10} L ${
+            width - padding.right + 72
+          } ${rightTagY - 10} L ${width - padding.right + 72} ${rightTagY + 10} L ${
+            width - padding.right + 28
+          } ${rightTagY + 10} Z"
+          fill="${rightTagColor}"
+        ></path>
+        <text x="${width - padding.right + 48}" y="${rightTagY + 4}" text-anchor="middle" class="candle-last-price">${
+          formatChartPrice(lastClose)
+        }</text>
+        <circle cx="${xAt(highest.index)}" cy="${priceY(highest.high)}" r="3.4" fill="#111111"></circle>
+        <text x="${xAt(highest.index)}" y="${priceY(highest.high) - 14}" text-anchor="middle" class="candle-annotation">
+          최고 ${formatChartPrice(highest.high)} (${formatPercent(highDelta)})
+        </text>
+        <circle cx="${xAt(lowest.index)}" cy="${priceY(lowest.low)}" r="3.4" fill="#111111"></circle>
+        <text x="${xAt(lowest.index)}" y="${priceY(lowest.low) + 22}" text-anchor="middle" class="candle-annotation">
+          최저 ${formatChartPrice(lowest.low)} (${formatPercent(lowDelta)})
+        </text>
+        ${candles
+          .map((candle, index) =>
+            index % Math.max(1, Math.ceil(candles.length / 6)) === 0 || index === candles.length - 1
+              ? `
+                  <text x="${xAt(index)}" y="${height - 10}" text-anchor="middle" class="candle-x-label">
+                    ${escapeHtml(String(candle.label))}
+                  </text>
+                `
+              : ""
+          )
+          .join("")}
+        <text x="${padding.left}" y="${padding.top - 2}" class="candle-panel-label">Price</text>
+        <text x="${padding.left}" y="${volumeTop - 6}" class="candle-panel-label">Volume ${formatCompactNumber(
+          candles.reduce((sum, candle) => sum + (candle.volume || 0), 0)
+        )}</text>
+        <text x="${width - 18}" y="${padding.top + 12}" text-anchor="end" class="candle-mode-label">Linear</text>
+      </svg>
+    </div>
+  `;
+}
+
+function buildMovingAveragePoints(candles, period, xAt, yAt) {
+  return candles
+    .map((_, index) => {
+      const start = Math.max(0, index - period + 1);
+      const window = candles.slice(start, index + 1);
+      if (!window.length) return null;
+      const value = window.reduce((sum, candle) => sum + candle.close, 0) / window.length;
+      return {
+        x: xAt(index),
+        y: yAt(value),
+      };
+    })
+    .filter(Boolean);
+}
+
+function formatChartPrice(value) {
+  return Number(value).toFixed(2);
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "0.00%";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function formatLatestDailyLabel() {
+  return new Date().toLocaleDateString("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+}
+
+function getTodayNyDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "America/New_York",
+  })
+    .formatToParts(new Date())
+    .reduce((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function getPriceDelta(company) {
   const liveChange = company.liveQuote?.changesPercentage;
   if (Number.isFinite(liveChange)) {
@@ -1956,14 +2359,23 @@ function renderLineChart(series, options = {}) {
   `;
 }
 
-function formatDecimal(value) {
+function formatDecimal(value, decimals = 1) {
   if (!Number.isFinite(value) || value <= 0) return "N/A";
-  return Number(value).toFixed(1);
+  return Number(value).toFixed(decimals);
 }
 
-function formatMoneyValue(value) {
-  const decimal = formatDecimal(value);
+function formatMoneyValue(value, { live = false } = {}) {
+  const decimal = formatDecimal(value, live ? 4 : 1);
   return decimal === "N/A" ? decimal : `$${decimal}`;
+}
+
+function formatDisplayPrice(value, { live = false } = {}) {
+  return formatMoneyValue(value, { live });
+}
+
+function formatPercentValue(value) {
+  if (!Number.isFinite(value)) return "N/A";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
 function formatCompactNumber(value) {

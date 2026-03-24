@@ -718,9 +718,85 @@ button {
   margin-top: 0.25rem;
 }
 
+.candle-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.candle-toolbar-left,
+.candle-range-tabs,
+.moving-average-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.candle-symbol-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.moving-average-legend {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.moving-average-legend .ma {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.96rem;
+}
+
+.moving-average-legend .ma-5 {
+  color: #50c85b;
+}
+
+.moving-average-legend .ma-20 {
+  color: #ff5a5a;
+}
+
+.moving-average-legend .ma-60 {
+  color: #ff9d2e;
+}
+
+.moving-average-legend .ma-120 {
+  color: #ab6cff;
+}
+
+.candle-range-button {
+  min-height: 2.35rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.candle-range-button.active {
+  background: rgba(61, 217, 165, 0.14);
+  border-color: rgba(61, 217, 165, 0.38);
+  color: #edfff9;
+}
+
 .chart-frame {
   border-radius: 1.2rem;
-  padding: 0.6rem;
+  padding: 0.4rem;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.012)),
     rgba(255, 255, 255, 0.01);
@@ -753,6 +829,73 @@ button {
   min-height: 12rem;
   color: var(--muted);
   font-size: 0.95rem;
+}
+
+.candle-chart-shell {
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.candle-chart-shell svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.candle-grid-line {
+  stroke: rgba(22, 34, 56, 0.08);
+  stroke-width: 1;
+}
+
+.candle-volume-grid-line {
+  stroke: rgba(22, 34, 56, 0.04);
+  stroke-width: 1;
+}
+
+.candle-axis-label {
+  fill: #7c8798;
+  font-size: 12px;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.candle-axis-label.volume {
+  fill: #9aa4b4;
+}
+
+.candle-x-label {
+  fill: #7f8a9a;
+  font-size: 12px;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.candle-panel-label,
+.candle-mode-label {
+  fill: #7b8494;
+  font-size: 12px;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-weight: 600;
+}
+
+.candle-moving-average {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.candle-annotation {
+  fill: #111111;
+  font-size: 12px;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-weight: 600;
+}
+
+.candle-last-price {
+  fill: #ffffff;
+  font-size: 12px;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-weight: 700;
 }
 
 .info-card {

@@ -1,6 +1,6 @@
 # Investor Intelligence Map
 
-기업 카드, 비교 바구니, 관계 맵, 실적 콜 요약, 파트별 추적을 한 화면에 모아둔 주식 맵 앱입니다. 현재는 데모 데이터로도 동작하고, FMP API 키를 넣으면 실시간 quote / 1분 차트 / earnings transcript 분석이 활성화됩니다.
+기업 카드, 비교 바구니, 관계 맵, 실적 콜 요약, 파트별 추적을 한 화면에 모아둔 주식 맵 앱입니다. 현재는 데모 데이터로도 동작하고, FMP API 키를 넣으면 실시간 quote / 일봉 OHLC 차트 / earnings transcript 분석이 활성화됩니다.
 
 ## 실행
 
@@ -22,7 +22,7 @@
 - 현재 진행 프로젝트 정리 영역
 - 사용자 정의 기업 추가와 로컬 저장
 - FMP 실시간 quote 연결
-- 활성 기업 1분 차트 연결
+- 활성 기업 일봉 OHLC 차트 연결
 - 최신 earnings transcript 기반 자동 요약
 
 ## 데이터 구조
@@ -60,10 +60,10 @@
 
 - 현재 구현은 Financial Modeling Prep 공식 endpoint를 사용합니다.
 - 시세: `batch-quote`
-- 1분 차트: `historical-chart/1min`
+- 일봉 차트: `historical-price-eod/full`
 - transcript 날짜: `earning-call-transcript-dates`
 - transcript 원문: `earning-call-transcript`
-- `price.series`는 활성 기업 기준으로 실시간 1분 차트로 갱신됩니다.
+- `price.series`와 `price.candles`는 활성 기업 기준으로 실시간 quote와 일봉 OHLC 차트로 갱신됩니다.
 - `earnings`는 최신 transcript를 불러와 키워드 기반으로 자동 재구성됩니다.
 - `relationships`를 공급망 / 투자 / 고객 관계 데이터로 교체
 - `investors`를 13F, 기관 보유, ETF 비중 등으로 교체

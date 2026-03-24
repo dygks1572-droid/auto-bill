@@ -65,11 +65,18 @@ function normalizeQuote(record) {
 }
 
 function normalizeChartBar(bar) {
-  const price = Number(bar.close ?? bar.price ?? bar.open ?? 0);
+  const open = Number(bar.open ?? bar.previousClose ?? bar.close ?? bar.price ?? 0);
+  const close = Number(bar.close ?? bar.price ?? open);
+  const high = Number(bar.high ?? Math.max(open, close));
+  const low = Number(bar.low ?? Math.min(open, close));
   return {
     date: bar.date ?? bar.datetime ?? "",
     label: formatBarLabel(bar.date ?? bar.datetime ?? ""),
-    value: price,
+    open,
+    high,
+    low,
+    close,
+    value: close,
     volume: Number(bar.volume ?? 0),
   };
 }
@@ -89,12 +96,31 @@ function formatBarLabel(value) {
   });
 }
 
+function formatDailyLabel(value) {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value);
+  }
+
+  return parsed.toLocaleDateString("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+}
+
 export async function fetchBatchQuotes(symbols, apiKey) {
   const uniqueSymbols = [...new Set(symbols.map((symbol) => symbol.toUpperCase()))].filter(
     Boolean
   );
 
-  if (!uniqueSymbols.length) return [];
+  if (!uniqueSymbols.length) {
+    return {
+      quotes: [],
+      source: "none",
+    };
+  }
 
   try {
     const batchUrl = buildUrl(
@@ -107,7 +133,12 @@ export async function fetchBatchQuotes(symbols, apiKey) {
       .map(normalizeQuote)
       .filter(Boolean);
 
-    if (normalized.length) return normalized;
+    if (normalized.length) {
+      return {
+        quotes: normalized,
+        source: "batch-quote",
+      };
+    }
   } catch {
     // Fall back to per-symbol requests if batch access is unavailable on the user's plan.
   }
@@ -121,9 +152,14 @@ export async function fetchBatchQuotes(symbols, apiKey) {
     })
   );
 
-  return settled
+  const quotes = settled
     .filter((entry) => entry.status === "fulfilled" && entry.value)
     .map((entry) => entry.value);
+
+  return {
+    quotes,
+    source: "quote fallback",
+  };
 }
 
 export async function fetchIntradayChart(symbol, apiKey, limit = 60) {
@@ -132,7 +168,46 @@ export async function fetchIntradayChart(symbol, apiKey, limit = 60) {
 
   return (Array.isArray(data) ? data : [])
     .map(normalizeChartBar)
-    .filter((bar) => bar.date && Number.isFinite(bar.value))
+    .filter(
+      (bar) =>
+        bar.date &&
+        Number.isFinite(bar.open) &&
+        Number.isFinite(bar.high) &&
+        Number.isFinite(bar.low) &&
+        Number.isFinite(bar.close)
+    )
+    .sort((left, right) => new Date(left.date) - new Date(right.date))
+    .slice(-limit);
+}
+
+export async function fetchDailyEodChart(symbol, apiKey, limit = 180) {
+  const url = buildUrl("historical-price-eod/full", { symbol }, apiKey);
+  const data = await getJson(url);
+  const rows = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.historical)
+      ? data.historical
+      : [];
+
+  return rows
+    .map((bar) => ({
+      date: bar.date ?? "",
+      label: formatDailyLabel(bar.date ?? ""),
+      open: Number(bar.open ?? 0),
+      high: Number(bar.high ?? 0),
+      low: Number(bar.low ?? 0),
+      close: Number(bar.close ?? 0),
+      value: Number(bar.close ?? 0),
+      volume: Number(bar.volume ?? 0),
+    }))
+    .filter(
+      (bar) =>
+        bar.date &&
+        Number.isFinite(bar.open) &&
+        Number.isFinite(bar.high) &&
+        Number.isFinite(bar.low) &&
+        Number.isFinite(bar.close)
+    )
     .sort((left, right) => new Date(left.date) - new Date(right.date))
     .slice(-limit);
 }
