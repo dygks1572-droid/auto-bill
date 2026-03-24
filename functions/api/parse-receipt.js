@@ -192,6 +192,8 @@ export async function onRequestPost(context) {
       'orderedDate must be YYYY-MM-DD or null.',
       'Preserve line-by-line row structure when visible.',
       'Prefer reading the exact printed Korean text over guessing similar words.',
+      'For long names (e.g., "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립"), do NOT abbreviate, cut, or hallucinate words (like 스딩워치, 세드위치, 깨비빔밥, 이즈드랍). Extract them exactly as printed including spaces.',
+      'Options starting with "+" or "ㄴ" (e.g., "ㄴ 이웃 블렌드(달콤)") must always be captured as separate rows with isOption=true, even if amount is 0. If no quantity is visible for the option, use qty=1.',
       'When product names are hard to read, prefer the visible letters and spacing rather than replacing them with generic words.',
     ].join(' ')
 
@@ -221,6 +223,7 @@ export async function onRequestPost(context) {
         'Do not collapse multiple lines into one item if separate rows are visible.',
         'If a product name is partially unclear, keep the closest visible spelling from the receipt rather than inventing a new word.',
         'Be extra careful with bakery names, sandwich names, drip coffee names, and financier option rows.',
+        'Ensure "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립" are read correctly and not misread. Options with "ㄴ" or "+" need qty=1 if missing.',
       ].join(' ')
       const rescueUserPrompt = `Re-analyze ${fileName} from scratch. Double-check every visible item row, option row, and total row before returning the schema only.`
 

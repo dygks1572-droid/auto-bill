@@ -223,7 +223,7 @@ export const PRODUCT_CATALOG = [
   },
   {
     name: '호두 크랜베리 깜빠뉴',
-    aliases: ['호두 크랜베리 깜빠뉴', '호두크랜베리깜빠뉴'],
+    aliases: ['호두 크랜베리 깜빠뉴', '호두크랜베리깜빠뉴', '홍두 그랙배리 깜빠뉴', '홍두그랙배리깜빠뉴', '호두 그랙배리 깜빠뉴', '호두그랙배리깜빠뉴'],
     category: 'bakery',
     countInBakeryTotal: true,
   },
@@ -331,7 +331,7 @@ export const PRODUCT_CATALOG = [
   },
   {
     name: '잠봉뵈르 샌드위치',
-    aliases: ['잠봉뵈르 샌드위치', '잠봉뵈르', '잠봉뵈르샌드위치'],
+    aliases: ['잠봉뵈르 샌드위치', '잠봉뵈르', '잠봉뵈르샌드위치', '볼블렌드 샌드위치', '볼블렌드샌드위치', '볼블랜드 샌드위치', '볼블랜드샌드위치'],
     category: 'review',
     countInBakeryTotal: false,
   },
