@@ -52,6 +52,397 @@ const elements = {
   detail: document.querySelector("#workspace-detail"),
 };
 
+const SECTOR_LABELS = {
+  All: "전체",
+  "AI Infra": "AI 인프라",
+  Cloud: "클라우드",
+  Consumer: "소비자 플랫폼",
+  Foundry: "파운드리",
+  Software: "소프트웨어",
+};
+
+const TAB_LABELS = {
+  overview: "개요",
+  earnings: "실적 콜",
+  relationships: "관계 맵",
+  capital: "자금 흐름",
+  projects: "프로젝트",
+};
+
+const RELATION_LABELS = {
+  Customer: "고객",
+  Supplier: "공급사",
+  Partner: "파트너",
+  Competitor: "경쟁사",
+  Platform: "플랫폼",
+  Peer: "비교 기업",
+};
+
+const QUOTE_SOURCE_LABELS = {
+  "batch-quote": "배치 시세",
+  "quote fallback": "개별 시세 폴백",
+  none: "없음",
+  unknown: "알 수 없음",
+};
+
+const LOCALIZATION_EXCLUDED_KEYS = new Set(["id", "ticker", "targetId", "sector", "type"]);
+
+const TEXT_TRANSLATIONS = {
+  "Custom": "사용자 정의",
+  "User watchlist": "사용자 관심종목",
+  "Custom profile": "사용자 프로필",
+  "Setup": "초기 설정",
+  "User-defined": "사용자 정의",
+  "Theme": "테마",
+  "Status": "상태",
+  "Needs live feed": "실시간 데이터 필요",
+  "Focus": "집중 포인트",
+  "Primary": "핵심",
+  "Secondary": "보조",
+  "Optionality": "선택지",
+  "Custom template": "사용자 템플릿",
+  "Needs review": "검토 필요",
+  "Demand": "수요",
+  "Margin": "마진",
+  "Capacity": "생산능력",
+  "Guidance": "가이던스",
+  "What mattered": "핵심 포인트",
+  "Model impact": "모델 영향",
+  "Open question": "남은 질문",
+  "Track top holders": "상위 보유자 추적",
+  "Capital watch": "자금 흐름 관찰",
+  "Strategic partners": "전략 파트너",
+  "Signal source": "신호 소스",
+  "User notes": "사용자 메모",
+  "Manual intelligence": "수동 인텔리전스",
+  "Core execution track": "핵심 실행 과제",
+  "To define": "정의 필요",
+  "Revenue unlock": "매출 레버리지",
+  "Longer-term option": "장기 선택지",
+  "Leader": "선도 기업",
+  "Platform": "플랫폼",
+  "Mega-cap bellwether": "메가캡 대표주",
+  "Platform compounder": "플랫폼 복리 성장주",
+  "Operating leverage story": "운영 레버리지 스토리",
+  "AI transition incumbent": "AI 전환 기존 강자",
+  "Attention + AI monetizer": "관심도 + AI 수익화",
+  "Critical supplier": "핵심 공급사",
+  "Manufacturing keystone": "제조 핵심축",
+  "Challenger": "도전자",
+  "Share gain candidate": "점유율 확대 후보",
+  "AI software lever": "AI 소프트웨어 레버리지",
+  "Narrative-sensitive compounder": "서사 민감형 복리 성장주",
+  "Call tone": "콜 톤",
+  "Key driver": "핵심 동력",
+  "Dependency": "의존 요소",
+  "AI lens": "AI 관점",
+  "Key link": "핵심 연결고리",
+  "Confident": "강한 자신감",
+  "Constructive": "우호적",
+  "Balanced": "균형적",
+  "Measured": "신중함",
+  "Aggressive": "공세적",
+  "Firm": "견조함",
+  "Improving": "개선 중",
+  "Sales-led": "영업 중심",
+  "Hyperscaler capex": "하이퍼스케일러 설비투자",
+  "TSMC / packaging": "TSMC / 패키징",
+  "Azure + Copilot": "애저 + 코파일럿",
+  "NVIDIA demand": "엔비디아 수요",
+  "AWS monetization": "AWS 수익화",
+  "Ad + cloud mix": "광고 + 클라우드 믹스",
+  "Search defense": "검색 방어",
+  "Cloud utilization": "클라우드 활용률",
+  "Ads + open source": "광고 + 오픈소스",
+  "Engagement gains": "참여도 개선",
+  "Node + packaging": "공정 + 패키징",
+  "Lead-time power": "리드타임 주도권",
+  "Second source": "대체 공급원",
+  "Software maturity": "소프트웨어 성숙도",
+  "Workflow adoption": "워크플로 도입",
+  "Commercial traction": "상업 부문 확산",
+  "Data Center": "데이터 센터",
+  "Gaming": "게이밍",
+  "Networking & Software": "네트워킹·소프트웨어",
+  "Narrative strength": "서사 강도",
+  "Dominant": "지배적",
+  "Signal": "신호",
+  "Stabilizing": "안정화 중",
+  "Strategic role": "전략적 역할",
+  "Moat builder": "해자 강화",
+  "Bullish": "강세",
+  "Inference": "추론",
+  "Software": "소프트웨어",
+  "Sovereign AI": "국가 주도 AI",
+  "Core holder": "핵심 보유자",
+  "Momentum capital": "모멘텀 자금",
+  "In progress": "진행 중",
+  "Scaling": "확대 중",
+  "Expanding": "확장 중",
+  "Azure & Infrastructure": "애저·인프라",
+  "Pull": "견인력",
+  "Accelerating": "가속 중",
+  "Productivity & Copilot": "생산성·코파일럿",
+  "Monetization": "수익화",
+  "Emerging": "부상 중",
+  "Security & Data Platform": "보안·데이터 플랫폼",
+  "Defensibility": "방어력",
+  "High": "높음",
+  "AWS": "AWS",
+  "Ads": "광고",
+  "Retail & Fulfillment": "리테일·물류",
+  "Profit role": "이익 기여도",
+  "High quality": "고품질",
+  "Execution": "실행력",
+  "Re-accelerating": "재가속",
+  "Search & Ads": "검색·광고",
+  "Under watch": "주시 필요",
+  "Google Cloud": "구글 클라우드",
+  "Improving mix": "믹스 개선",
+  "YouTube & Subscriptions": "유튜브·구독",
+  "Stability": "안정성",
+  "Strong": "강함",
+  "Live rollout": "실사용 확장",
+  "Core Ads": "핵심 광고",
+  "Engine": "엔진",
+  "Very strong": "매우 강함",
+  "Reels & Messaging": "릴스·메시징",
+  "Flywheel": "플라이휠",
+  "Strengthening": "강화 중",
+  "Reality Labs": "리얼리티 랩스",
+  "Risk": "리스크",
+  "Persistent": "지속적",
+  "Compounding": "누적 개선",
+  "Exploratory": "탐색 단계",
+  "Leading Edge Nodes": "선단 공정",
+  "Role": "역할",
+  "Core bottleneck": "핵심 병목",
+  "Advanced Packaging": "첨단 패키징",
+  "Constraint": "제약",
+  "Edge / Automotive": "엣지·자동차",
+  "Diversifier": "분산 축",
+  "Steady": "안정적",
+  "Executing": "실행 중",
+  "Data Center": "데이터 센터",
+  "Share gain watch": "점유율 확대 관찰",
+  "Client": "클라이언트",
+  "Cycle": "사이클",
+  "Recovering": "회복 중",
+  "Embedded & Gaming": "임베디드·게이밍",
+  "Buffer": "완충축",
+  "Mixed": "혼합",
+  "Stabilizing": "안정화 중",
+  "Upside capital": "상승 기대 자금",
+  "Signal investors": "신호 투자자",
+  "Commercial": "상업 부문",
+  "Proof point": "검증 포인트",
+  "Most important": "가장 중요",
+  "Government": "정부 부문",
+  "Foundation": "기반",
+  "Sticky": "고착적",
+  "AIP Platform": "AIP 플랫폼",
+  "Narrative": "서사",
+  "Bootcamps": "부트캠프",
+  "Deployment": "배포",
+  "Volatility source": "변동성 원천",
+  "Theme holder": "테마 보유자",
+  "Stable": "안정",
+  "The main message is that AI factory demand remains broadening rather than peaking, with inference and sovereign build-outs supporting the next leg.": "핵심 메시지는 AI 팩토리 수요가 정점을 찍기보다 더 넓어지고 있으며, 추론 수요와 국가 단위 구축이 다음 성장 구간을 지지하고 있다는 점입니다.",
+  "Hyperscaler capex and inference demand make this the cleanest AI infrastructure demand read-through.": "하이퍼스케일러 설비투자와 추론 수요를 가장 직접적으로 읽을 수 있는 대표적인 AI 인프라 종목입니다.",
+  "Management still frames demand as capacity constrained before demand constrained.": "경영진은 여전히 수요 부족보다 생산능력 제약이 먼저라고 보고 있습니다.",
+  "Gaming is no longer the main story, but it matters for margin mix and inventory health.": "게이밍은 더 이상 핵심 서사는 아니지만, 마진 믹스와 재고 건전성에는 여전히 중요합니다.",
+  "Networking, CUDA, and enterprise software deepen switching costs around accelerators.": "네트워킹, CUDA, 기업용 소프트웨어는 가속기 주변의 전환 비용을 더 높여 줍니다.",
+  "Microsoft remains one of the most important downstream demand proxies for NVIDIA.": "마이크로소프트는 엔비디아 하류 수요를 읽는 가장 중요한 지표 중 하나입니다.",
+  "Amazon still depends on external accelerator supply while scaling internal silicon.": "아마존은 자체 실리콘을 키우는 동안에도 외부 가속기 공급에 계속 의존합니다.",
+  "Meta remains a meaningful infrastructure customer as it expands AI model training and inference.": "메타는 AI 모델 학습과 추론을 확대하면서 여전히 의미 있는 인프라 고객입니다.",
+  "Advanced node and packaging capacity remain mission critical to the roadmap.": "첨단 공정과 패키징 생산능력은 로드맵 실행에 핵심입니다.",
+  "AMD competes for AI accelerator budget and software mindshare.": "AMD는 AI 가속기 예산과 소프트웨어 생태계 주도권을 놓고 경쟁합니다.",
+  "The key execution topic is converting backlog into installed clusters without margin slippage.": "핵심 실행 과제는 마진 훼손 없이 수주 잔고를 실제 설치 클러스터로 전환하는 것입니다.",
+  "Software monetization is becoming an important durability lever beyond hardware cycles.": "소프트웨어 수익화는 하드웨어 사이클을 넘어서는 지속성 레버로 중요해지고 있습니다.",
+  "These projects broaden the customer base beyond US hyperscalers.": "이 프로젝트들은 미국 하이퍼스케일러를 넘어 고객 기반을 넓혀 줍니다.",
+  "The most important question is how much AI demand converts into durable Azure, Copilot, and productivity monetization.": "가장 중요한 질문은 AI 수요가 얼마나 지속 가능한 애저, 코파일럿, 생산성 수익화로 이어지느냐입니다.",
+  "Cloud and AI infrastructure utilization trends remain the first thing to monitor.": "클라우드와 AI 인프라 활용률 추세가 가장 먼저 봐야 할 지표입니다.",
+  "Copilot attach and paid seat conversion matter more than demo excitement.": "코파일럿 부가판매와 유료 좌석 전환이 데모 화제성보다 훨씬 중요합니다.",
+  "Security creates budget stickiness and reinforces enterprise platform consolidation.": "보안은 예산의 고착성을 높이고 기업 플랫폼 통합을 강화합니다.",
+  "Management is balancing AI enthusiasm with capacity discipline, stressing that monetization should broaden across cloud, productivity, and data layers.": "경영진은 AI 기대감과 설비 규율 사이의 균형을 강조하며, 수익화가 클라우드·생산성·데이터 전반으로 확장돼야 한다고 말합니다.",
+  "AWS, ads, and retail efficiency create a three-engine model where AI can either reinforce margin gains or consume them.": "AWS, 광고, 리테일 효율화가 세 개의 엔진을 이루며, AI는 마진 개선을 강화할 수도 있고 반대로 잠식할 수도 있습니다.",
+  "The main read-through is whether AI workloads deepen utilization faster than custom silicon reduces external spend.": "핵심은 AI 워크로드가 자체 칩 도입에 따른 외부 지출 감소보다 더 빠르게 활용률을 끌어올리느냐입니다.",
+  "Ads are an underappreciated contributor to operating leverage and cash generation.": "광고는 운영 레버리지와 현금창출에 과소평가된 기여를 하고 있습니다.",
+  "Retail matters because disciplined logistics creates room to invest elsewhere.": "리테일은 물류 효율화가 다른 곳에 투자할 여지를 만들어 준다는 점에서 중요합니다.",
+  "The call reads as a discipline story: invest where demand is obvious, keep retail efficiency gains, and use ads to support mix quality.": "이번 콜은 규율의 이야기로 읽힙니다. 수요가 명확한 곳에 투자하고, 리테일 효율을 유지하며, 광고로 사업 믹스의 질을 높이는 전략입니다.",
+  "The core question is whether Google can defend search economics while turning AI usage into a broader platform advantage.": "핵심 질문은 구글이 검색 경제성을 지키면서 AI 사용을 더 넓은 플랫폼 우위로 전환할 수 있느냐입니다.",
+  "Search economics remain the anchor variable in any AI transition scenario.": "검색 경제성은 어떤 AI 전환 시나리오에서도 가장 중요한 축입니다.",
+  "Cloud profitability and AI workload adoption matter more than pure revenue growth now.": "이제는 단순 매출 성장보다 클라우드 수익성과 AI 워크로드 도입이 더 중요합니다.",
+  "A resilient media layer helps cushion experimentation in search and cloud.": "탄탄한 미디어 계층이 검색과 클라우드의 실험 비용을 완충해 줍니다.",
+  "Alphabet sounds increasingly willing to trade near-term AI costs for ecosystem defense, but investors still need proof that search monetization remains durable.": "알파벳은 단기 AI 비용을 감수하며 생태계를 방어하려는 의지가 강해 보이지만, 투자자들은 검색 수익화의 지속성을 여전히 확인하고 싶어 합니다.",
+  "Meta is a mix of ad efficiency, open-source AI leverage, and optional upside from new engagement surfaces.": "메타는 광고 효율, 오픈소스 AI 레버리지, 새로운 참여 지면에서 나오는 선택적 업사이드가 결합된 기업입니다.",
+  "Ad ranking and targeting gains remain the source of financial oxygen for everything else.": "광고 랭킹과 타기팅 개선은 다른 모든 사업을 지탱하는 현금창출의 핵심입니다.",
+  "Higher engagement expands the monetizable inventory base over time.": "참여도가 높아질수록 장기적으로 수익화 가능한 인벤토리가 늘어납니다.",
+  "Losses are still a valuation debate even if they buy optionality around the next platform.": "손실이 차세대 플랫폼 선택지를 사준다고 해도, 여전히 밸류에이션 논쟁거리입니다.",
+  "Meta is leaning into AI as both an ad efficiency engine and an ecosystem strategy, while asking investors to tolerate elevated capex.": "메타는 AI를 광고 효율 엔진이자 생태계 전략으로 밀고 있으며, 투자자들에게는 높은 설비투자를 감내해 달라고 요구하고 있습니다.",
+  "TSMC is the clearest manufacturing bottleneck proxy for advanced AI compute and packaging supply chains.": "TSMC는 첨단 AI 연산과 패키징 공급망 병목을 가장 직접적으로 보여주는 제조 지표입니다.",
+  "Node leadership remains the most durable strategic edge in the AI stack.": "공정 리더십은 AI 스택에서 가장 오래 지속될 전략적 우위입니다.",
+  "Packaging capacity can shape the revenue timing of multiple customers at once.": "패키징 생산능력은 여러 고객의 매출 인식 시점을 동시에 좌우할 수 있습니다.",
+  "Diversified end markets help stabilize utilization across cycles.": "다양한 최종 시장은 사이클 전반의 가동률 안정에 도움을 줍니다.",
+  "TSMC sounds like the control tower of the AI hardware stack: customer demand is visible, but timing depends on node and packaging capacity expansion.": "TSMC는 AI 하드웨어 스택의 관제탑처럼 보입니다. 고객 수요는 분명하지만, 실제 타이밍은 공정과 패키징 증설에 달려 있습니다.",
+  "AMD is the main challenger read-through on whether customers want a second AI infrastructure stack beyond NVIDIA.": "AMD는 고객들이 엔비디아 외에 두 번째 AI 인프라 스택을 원하느냐를 보여주는 대표적인 도전자입니다.",
+  "The data center segment is where AI upside must prove itself commercially.": "데이터 센터 부문이야말로 AI 업사이드가 상업적으로 검증돼야 하는 영역입니다.",
+  "PC recovery helps support cash generation while the AI story matures.": "PC 회복은 AI 서사가 성숙해지는 동안 현금창출을 뒷받침합니다.",
+  "This base business gives diversification but can blur the pure AI narrative.": "기존 사업은 분산 효과를 주지만, 순수 AI 서사를 흐릴 수도 있습니다.",
+  "The story is becoming less about theoretical AI participation and more about whether AMD can earn real wallet share with a credible software and platform motion.": "이제 이야기는 이론적 AI 참여보다, AMD가 신뢰할 수 있는 소프트웨어·플랫폼 전략으로 실제 지갑 점유율을 가져올 수 있느냐에 더 가까워지고 있습니다.",
+  "Palantir is a useful software-layer read-through for whether AI spending moves from experimentation into operational deployment.": "팔란티어는 AI 지출이 실험 단계에서 실제 운영 배포 단계로 넘어가는지를 보여주는 소프트웨어 계층 지표입니다.",
+  "Commercial momentum is what proves the business is broadening beyond a niche government niche.": "상업 부문 모멘텀이야말로 이 사업이 정부 특화 영역을 넘어 확장되고 있음을 증명합니다.",
+  "Government remains a stabilizing base but is not enough on its own to justify premium AI expectations.": "정부 부문은 안정적 기반이지만, 그것만으로는 높은 AI 프리미엄을 정당화하기 어렵습니다.",
+  "AIP is the bridge between AI excitement and actual deployment economics.": "AIP는 AI 기대감과 실제 배포 경제성을 잇는 다리입니다.",
+  "Palantir's calls matter most when management can connect AI enthusiasm to concrete deployment, procurement, and expansion metrics.": "팔란티어의 실적 콜은 경영진이 AI 기대를 실제 배포, 조달, 확장 지표와 연결할 때 가장 의미가 큽니다.",
+  "Latest call template": "최근 실적 콜 템플릿",
+  "Inference demand is becoming a second growth engine rather than a replacement for training.": "추론 수요는 학습 수요를 대체하는 것이 아니라 두 번째 성장 엔진이 되고 있습니다.",
+  "Large customers are preparing multi-generation roadmaps, not one-off cluster purchases.": "대형 고객들은 일회성 클러스터 구매가 아니라 다세대 로드맵을 준비하고 있습니다.",
+  "Software and networking are increasingly used to defend system-level gross margins.": "소프트웨어와 네트워킹은 점점 시스템 단위의 매출총이익률을 방어하는 수단이 되고 있습니다.",
+  "Packaging and power delivery still matter as bottlenecks.": "패키징과 전력 공급은 여전히 병목 요소입니다.",
+  "A few hyperscalers drive a meaningful share of demand concentration.": "소수의 하이퍼스케일러가 수요 집중의 상당 부분을 차지합니다.",
+  "Any digestion signal at cloud customers can quickly affect sentiment.": "클라우드 고객의 소화 구간 신호는 심리에 빠르게 영향을 줄 수 있습니다.",
+  "Management sounded more focused on system availability, deployment velocity, and customer ROI than on unit shipments alone.": "경영진은 단순 출하량보다 시스템 가용성, 배포 속도, 고객 ROI에 더 초점을 맞춘 모습이었습니다.",
+  "Bull cases should track customer deployment cadence and attach rates from networking and software, not just accelerator revenue.": "강세 시나리오는 가속기 매출뿐 아니라 고객 배포 속도와 네트워킹·소프트웨어 부가판매율까지 함께 추적해야 합니다.",
+  "How much of the next wave is durable inference demand versus front-loaded infrastructure stocking?": "다음 수요 파동은 지속 가능한 추론 수요인가, 아니면 선행 인프라 재고 축적인가?",
+  "Azure demand remains supply-constrained in parts of the footprint.": "애저 수요는 일부 영역에서 여전히 공급 제약을 받고 있습니다.",
+  "Copilot messaging is shifting from experimentation to workflow adoption and measurable ROI.": "코파일럿 메시지는 실험 단계에서 실제 워크플로 도입과 측정 가능한 ROI 중심으로 옮겨가고 있습니다.",
+  "The platform narrative remains stronger when security and data are included with AI.": "AI에 보안과 데이터를 함께 묶어 설명할 때 플랫폼 서사가 더 강해집니다.",
+  "Capex efficiency and payback period are becoming central investor questions.": "설비투자 효율과 회수 기간은 투자자들의 핵심 질문이 되고 있습니다.",
+  "Copilot seat conversion needs to keep validating the pricing architecture.": "코파일럿 유료 좌석 전환은 가격 체계를 계속 검증해줘야 합니다.",
+  "Any moderation in Azure backlog commentary could reset expectations.": "애저 수주잔고 관련 코멘트가 둔화되면 기대치가 다시 낮아질 수 있습니다.",
+  "The strongest part of the call is that AI is not isolated; it is being sold as part of a broader platform bundle.": "이번 콜의 가장 강한 지점은 AI가 고립된 제품이 아니라 더 넓은 플랫폼 번들 안에서 판매되고 있다는 점입니다.",
+  "Watch Azure backlog, enterprise AI attach, and implied capex productivity together instead of in isolation.": "애저 수주잔고, 기업 AI 부가판매, 설비투자 생산성을 따로 보지 말고 함께 봐야 합니다.",
+  "How quickly can Microsoft move from AI demand capture to visible margin normalization?": "마이크로소프트는 AI 수요 확보에서 실제 마진 정상화로 얼마나 빨리 넘어갈 수 있을까요?",
+  "AWS commentary matters most when paired with disclosed capex and custom silicon direction.": "AWS 관련 코멘트는 공개된 설비투자와 자체 실리콘 방향성과 함께 볼 때 가장 중요합니다.",
+  "Ads continue to improve the quality of the business mix.": "광고는 계속해서 사업 믹스의 질을 높여주고 있습니다.",
+  "Retail execution is now a margin enabler rather than a permanent drag.": "리테일 실행력은 이제 상시 부담이 아니라 마진 개선 요인입니다.",
+  "How much AI demand lands on AWS versus customer-specific deployments elsewhere?": "AI 수요가 AWS에 얼마나 안착하고, 얼마나 고객 맞춤형 배포로 빠지는가?",
+  "Custom silicon may change dependency on third-party accelerators over time.": "자체 실리콘은 시간이 지나며 외부 가속기 의존도를 바꿀 수 있습니다.",
+  "Consumer softness can still offset cloud optimism in the short run.": "단기적으로는 소비 둔화가 클라우드 기대를 상쇄할 수 있습니다.",
+  "Amazon sounds most attractive when retail discipline and AWS re-acceleration show up together.": "아마존은 리테일 규율과 AWS 재가속이 함께 나타날 때 가장 매력적으로 보입니다.",
+  "Separate the AWS workload growth story from the retail margin story so the thesis does not become too dependent on one segment.": "투자 논리가 한 사업부에 과도하게 의존하지 않도록 AWS 워크로드 성장과 리테일 마진 스토리를 분리해서 봐야 합니다.",
+  "Will custom silicon improve AWS economics enough to change how investors value the cloud AI opportunity?": "자체 실리콘이 AWS 경제성을 충분히 개선해 투자자들의 클라우드 AI 가치평가 방식을 바꿀 수 있을까요?",
+  "Search remains healthy enough to fund AI experimentation.": "검색 사업은 AI 실험을 감당할 만큼 충분히 견조합니다.",
+  "Cloud is becoming a clearer second pillar rather than an optional story.": "클라우드는 선택적 스토리가 아니라 더 분명한 두 번째 축이 되고 있습니다.",
+  "Product integration speed matters almost as much as model quality.": "제품 통합 속도는 모델 품질만큼이나 중요합니다.",
+  "Any deterioration in search monetization could overwhelm other positives.": "검색 수익화가 약해지면 다른 긍정 요소를 모두 덮어버릴 수 있습니다.",
+  "Cloud margins need to keep improving if AI spend remains elevated.": "AI 지출이 높은 수준을 유지한다면 클라우드 마진도 계속 개선돼야 합니다.",
+  "Regulatory and default distribution issues stay on the board.": "규제와 기본 배포 채널 문제는 여전히 남아 있습니다.",
+  "The business is strongest when search, cloud, and YouTube all contribute to financing the AI transition at once.": "검색, 클라우드, 유튜브가 함께 AI 전환 비용을 감당할 때 사업은 가장 강해집니다.",
+  "Track search monetization quality separately from AI product excitement so the thesis stays grounded.": "투자 논리가 흔들리지 않도록 검색 수익화의 질을 AI 제품 화제성과 분리해 추적해야 합니다.",
+  "Can Google create a visibly better AI product experience without damaging the economics of its incumbent channels?": "구글은 기존 채널의 경제성을 해치지 않으면서 눈에 띄게 더 나은 AI 경험을 만들 수 있을까요?",
+  "Recommendation quality and ad conversion remain the most important proof points.": "추천 품질과 광고 전환율은 여전히 가장 중요한 검증 지표입니다.",
+  "Open-source positioning aims to attract developers while preserving product agility.": "오픈소스 전략은 제품 민첩성을 유지하면서 개발자를 끌어들이려는 의도입니다.",
+  "Heavy infrastructure spend is justified as foundational rather than optional.": "대규모 인프라 지출은 선택이 아니라 기반 투자로 정당화되고 있습니다.",
+  "Capex escalation can become the headline if monetization lags.": "수익화가 늦어지면 설비투자 확대 자체가 핵심 논쟁이 될 수 있습니다.",
+  "Reality Labs still creates a valuation discount for some investors.": "리얼리티 랩스는 여전히 일부 투자자에게 밸류에이션 할인 요인입니다.",
+  "User engagement gains must keep translating into monetization efficiency.": "사용자 참여도 개선은 계속해서 수익화 효율로 이어져야 합니다.",
+  "Meta sounds strongest when AI is discussed as a core ad-ranking and user retention driver instead of a side bet.": "메타는 AI가 부가 옵션이 아니라 핵심 광고 랭킹·리텐션 동력으로 설명될 때 가장 강해 보입니다.",
+  "Watch ad efficiency gains and capex intensity together to avoid missing the margin trade-off.": "마진 상충 관계를 놓치지 않으려면 광고 효율 개선과 설비투자 강도를 함께 봐야 합니다.",
+  "How much optional upside from open-source model leadership will ever show up in direct monetization?": "오픈소스 모델 리더십의 선택적 업사이드가 실제 직접 수익화로 얼마나 이어질까요?",
+  "Advanced node and packaging demand remain structurally stronger than broad semiconductor demand.": "첨단 공정과 패키징 수요는 전체 반도체 수요보다 구조적으로 더 강합니다.",
+  "Customer concentration is real, but so is the visibility around next-generation roadmaps.": "고객 집중도는 현실이지만, 차세대 로드맵 가시성도 그만큼 높습니다.",
+  "Geographic diversification is still an execution topic rather than a solved one.": "지역 다변화는 이미 끝난 문제가 아니라 여전히 실행 과제입니다.",
+  "Packaging capacity could remain the gating factor for customer product ramps.": "패키징 생산능력은 고객 제품 출시 확대의 결정적 제약으로 남을 수 있습니다.",
+  "Geopolitical headlines can dominate valuation even when fundamentals are strong.": "기초 체력이 강해도 지정학 이슈가 밸류에이션을 좌우할 수 있습니다.",
+  "Smartphone and consumer softness still affect mixed-utilization perceptions.": "스마트폰과 소비자 수요 부진은 여전히 혼합 가동률 인식에 영향을 줍니다.",
+  "Packaging capacity expansion may matter nearly as much as node leadership for near-term upside.": "단기 업사이드를 위해서는 공정 리더십만큼 패키징 증설도 중요할 수 있습니다.",
+  "Track customer roadmap commentary together with packaging capacity additions and mix shifts.": "고객 로드맵 코멘트와 패키징 증설, 제품 믹스 변화를 함께 추적해야 합니다.",
+  "How much pricing power can TSMC sustain if AI demand stays concentrated in the most advanced stack?": "AI 수요가 최첨단 스택에 집중된 채 유지된다면, TSMC는 얼마나 가격 결정력을 유지할 수 있을까요?",
+  "Customer appetite for a second supplier remains an important theme.": "두 번째 공급사를 원하려는 고객 수요는 여전히 중요한 주제입니다.",
+  "Management is increasingly emphasizing system solutions rather than just chip specs.": "경영진은 단순 칩 사양보다 시스템 솔루션을 점점 더 강조하고 있습니다.",
+  "The broader product portfolio helps fund the AI push but can cloud the narrative.": "넓은 제품 포트폴리오는 AI 확장을 뒷받침하지만, 서사를 흐릴 수도 있습니다.",
+  "Software readiness remains the key gap versus the category leader.": "소프트웨어 준비도는 여전히 업계 선도업체 대비 가장 큰 격차입니다.",
+  "Supply access at TSMC is a shared dependency with competitors.": "TSMC 공급 접근성은 경쟁사들과 공유하는 공통 의존 요소입니다.",
+  "Investors need proof of sustained deployment, not just pilot announcements.": "투자자들은 파일럿 발표가 아니라 지속적인 배포의 증거를 원합니다.",
+  "The strongest case is not just product performance, but customer desire for supply-chain and pricing diversification.": "가장 강한 투자 포인트는 제품 성능뿐 아니라 고객들의 공급망·가격 다변화 욕구입니다.",
+  "Watch deployment scale, customer references, and software ecosystem traction together.": "배포 규모, 고객 레퍼런스, 소프트웨어 생태계 확산을 함께 봐야 합니다.",
+  "Can AMD become a durable second platform, or does it remain a cyclical trade on occasional share gains?": "AMD는 지속 가능한 2위 플랫폼이 될 수 있을까요, 아니면 간헐적 점유율 확대에 기대는 순환주로 남을까요?",
+  "Commercial conversion speed is the main proof point for AI demand durability.": "상업 부문 전환 속도는 AI 수요 지속성을 보여주는 핵심 지표입니다.",
+  "Government remains useful as a base, but commercial adoption has to carry the multiple.": "정부 부문은 기반으로 유용하지만, 높은 밸류에이션은 결국 상업 부문 도입이 지탱해야 합니다.",
+  "Management's language often emphasizes platform standardization and operational urgency.": "경영진의 표현은 종종 플랫폼 표준화와 운영 긴급성을 강조합니다.",
+  "Valuation is highly sensitive to any slowdown in commercial momentum.": "밸류에이션은 상업 부문 모멘텀 둔화에 매우 민감합니다.",
+  "The AI narrative can outrun near-term financial delivery.": "AI 서사는 단기 실적 전달 속도를 앞질러 갈 수 있습니다.",
+  "Large-deal concentration can create lumpy optics.": "대형 계약 집중은 실적 흐름을 들쑥날쑥하게 보이게 할 수 있습니다.",
+  "The market wants evidence that Palantir is moving from demos to standard operating deployments.": "시장은 팔란티어가 데모 단계에서 표준 운영 배포 단계로 넘어가고 있다는 증거를 원합니다.",
+  "Track commercial customer count, expansion motion, and deployment speed more than top-line excitement.": "외형 성장의 화제성보다 상업 고객 수, 확장 흐름, 배포 속도를 더 중시해 봐야 합니다.",
+  "How durable is the current AI demand wave once early enthusiasm normalizes into procurement cycles?": "초기 열기가 조달 사이클로 정상화된 뒤에도 현재 AI 수요 파동은 얼마나 지속될까요?",
+  "AI infrastructure build-out": "AI 인프라 확장",
+  "Copilot monetization": "코파일럿 수익화",
+  "Security platform consolidation": "보안 플랫폼 통합",
+  "Custom silicon roadmap": "자체 실리콘 로드맵",
+  "Fulfillment efficiency": "물류 효율화",
+  "Ads monetization surface expansion": "광고 수익화 지면 확대",
+  "Search AI integration": "검색 AI 통합",
+  "Cloud profitability improvement": "클라우드 수익성 개선",
+  "Gemini product expansion": "제미니 제품 확장",
+  "Open-source model ecosystem": "오픈소스 모델 생태계",
+  "Ad ranking AI improvements": "광고 랭킹 AI 개선",
+  "Wearables and next platform bets": "웨어러블·차세대 플랫폼 베팅",
+  "2nm node readiness": "2나노 공정 준비",
+  "Advanced packaging expansion": "첨단 패키징 확장",
+  "Geographic manufacturing footprint": "지역별 생산 거점",
+  "AI accelerator platform push": "AI 가속기 플랫폼 확대",
+  "Software ecosystem strengthening": "소프트웨어 생태계 강화",
+  "Client recovery support": "클라이언트 회복 지원",
+  "AIP deployment expansion": "AIP 배포 확대",
+  "Commercial vertical penetration": "상업 부문 침투 확대",
+  "Government base reinforcement": "정부 부문 기반 강화",
+  "Narrative capital": "서사 자금",
+  "Operating capital proxy": "운영 자금 지표",
+  "Swing capital": "변동 자금",
+  "Stability capital": "안정 자금",
+  "High-conviction capital": "고확신 자금",
+  "Upside capital": "상승 기대 자금",
+  "Volatility source": "변동성 원천",
+  "Theme holder": "테마 보유자",
+};
+
+function translateText(value) {
+  if (typeof value !== "string") return value;
+  return TEXT_TRANSLATIONS[value] ?? value;
+}
+
+function localizeData(value, key = "") {
+  if (Array.isArray(value)) {
+    return value.map((item) => localizeData(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        LOCALIZATION_EXCLUDED_KEYS.has(entryKey)
+          ? entryValue
+          : localizeData(entryValue, entryKey),
+      ])
+    );
+  }
+
+  if (typeof value === "string" && !LOCALIZATION_EXCLUDED_KEYS.has(key)) {
+    return translateText(value);
+  }
+
+  return value;
+}
+
+function formatSectorLabel(sector) {
+  return SECTOR_LABELS[sector] ?? sector;
+}
+
+function formatTabLabel(tabId, fallback) {
+  return TAB_LABELS[tabId] ?? fallback;
+}
+
+function formatRelationLabel(type) {
+  return RELATION_LABELS[type] ?? type;
+}
+
+function formatQuoteSource(source) {
+  return QUOTE_SOURCE_LABELS[source] ?? source ?? "알 수 없음";
+}
+
 function createLiveChannel(status, message, syncedAt = null) {
   return { status, message, syncedAt };
 }
@@ -64,8 +455,8 @@ function createDefaultLiveState(apiKey = "") {
     market: createLiveChannel(
       enabled ? "idle" : "demo",
       enabled
-        ? "실시간 quote 연결을 시작할 준비가 되어 있습니다."
-        : "API key를 넣으면 실시간 시세와 일봉 OHLC 차트로 전환됩니다."
+        ? "실시간 시세 연결을 시작할 준비가 되어 있습니다."
+        : "API 키를 넣으면 실시간 시세와 일봉 OHLC 차트로 전환됩니다."
     ),
     chart: createLiveChannel(
       enabled ? "idle" : "demo",
@@ -76,8 +467,8 @@ function createDefaultLiveState(apiKey = "") {
     transcript: createLiveChannel(
       enabled ? "idle" : "demo",
       enabled
-        ? "Earnings 탭에서 최신 컨퍼런스 콜 transcript를 분석합니다."
-        : "실적 콜 transcript 분석은 API key를 넣으면 활성화됩니다."
+        ? "실적 콜 탭에서 최신 컨퍼런스 콜 원문을 분석합니다."
+        : "실적 콜 원문 분석은 API 키를 넣으면 활성화됩니다."
     ),
     capital: createLiveChannel(
       "static",
@@ -119,6 +510,8 @@ function hydrateCompanies(customCompanies) {
 }
 
 function prepareCompany(company) {
+  company = localizeData(company);
+
   if (!company.price) return company;
 
   if (!company.price.candles?.length) {
@@ -381,10 +774,10 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
     id,
     name,
     ticker,
-    country: "Custom",
+    country: "사용자 정의",
     sector,
-    maturity: "User watchlist",
-    marketCapLabel: "Custom profile",
+    maturity: "사용자 관심종목",
+    marketCapLabel: "사용자 프로필",
     thesis,
     price: {
       current,
@@ -393,16 +786,16 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
       series: priceSeries,
     },
     summaryMetrics: [
-      { label: "Setup", value: "User-defined" },
+      { label: "초기 설정", value: "사용자 정의" },
       { label: "Theme", value: preset.headline },
-      { label: "Status", value: "Needs live feed" },
+      { label: "상태", value: "실시간 데이터 필요" },
     ],
     segments: preset.segments.map((segmentName, index) => ({
       id: `${id}-segment-${index + 1}`,
       name: segmentName,
-      metricLabel: "Focus",
+      metricLabel: "집중 포인트",
       metricValue:
-        index === 0 ? "Primary" : index === 1 ? "Secondary" : "Optionality",
+        index === 0 ? "핵심" : index === 1 ? "보조" : "선택지",
       note:
         index === 0
           ? `${name}에서 가장 먼저 추적할 축입니다.`
@@ -422,8 +815,8 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
       })),
     })),
     earnings: {
-      period: "Custom template",
-      tone: "Needs review",
+      period: "사용자 템플릿",
+      tone: "검토 필요",
       summary:
         `${name}의 최근 실적 콜 핵심 메시지를 넣으면 여기에서 요약, 리스크, 가이던스 해석을 한 번에 볼 수 있게 설계되어 있습니다.`,
       highlights: [
@@ -437,22 +830,22 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
         "가이던스 대비 시장 컨센서스 비교 필요",
       ],
       keywordHeat: [
-        { label: "Demand", value: 52 },
-        { label: "Margin", value: 41 },
-        { label: "Capacity", value: 38 },
-        { label: "Guidance", value: 47 },
+        { label: "수요", value: 52 },
+        { label: "마진", value: 41 },
+        { label: "생산능력", value: 38 },
+        { label: "가이던스", value: 47 },
       ],
       panelNotes: [
         {
-          title: "What mattered",
+          title: "핵심 포인트",
           body: `${name}에서 가장 중요한 발언을 2~3줄로 요약하도록 비워 둔 자리입니다.`,
         },
         {
-          title: "Model impact",
+          title: "모델 영향",
           body: "EPS, 매출, 멀티플 중 어디에 가장 큰 영향을 주는지 적어두면 좋습니다.",
         },
         {
-          title: "Open question",
+          title: "남은 질문",
           body: "다음 분기까지 꼭 확인할 질문을 남겨두세요.",
         },
       ],
@@ -468,37 +861,37 @@ function createCustomCompany({ name, ticker, sector, thesis }) {
     })),
     investors: [
       {
-        name: "Track top holders",
-        role: "Capital watch",
+        name: "상위 보유자 추적",
+        role: "자금 흐름 관찰",
         note: "13F, 기관 보유, ETF 비중을 연결하면 됩니다.",
       },
       {
-        name: "Strategic partners",
-        role: "Signal source",
+        name: "전략 파트너",
+        role: "신호 소스",
         note: "투자자가 아니라도 수요/고객/파트너가 더 중요한 경우가 많습니다.",
       },
       {
-        name: "User notes",
-        role: "Manual intelligence",
+        name: "사용자 메모",
+        role: "수동 인텔리전스",
         note: "중요 투자자나 펀드, 창업자 매도/매수 흐름을 여기에 적을 수 있습니다.",
       },
     ],
     initiatives: [
       {
-        title: "Core execution track",
-        stage: "To define",
+        title: "핵심 실행 과제",
+        stage: "정의 필요",
         part: preset.segments[0],
         detail: "가장 중요한 신제품/고객사/공장/플랫폼 로드맵을 여기에 기록하세요.",
       },
       {
-        title: "Revenue unlock",
-        stage: "To define",
+        title: "매출 레버리지",
+        stage: "정의 필요",
         part: preset.segments[1],
         detail: "실적에 영향을 줄 신규 계약, 가격 정책, 파트너십을 추적하세요.",
       },
       {
-        title: "Longer-term option",
-        stage: "To define",
+        title: "장기 선택지",
+        stage: "정의 필요",
         part: preset.segments[2],
         detail: "장기적으로 valuation re-rate를 만들 수 있는 선택지를 정리하세요.",
       },
@@ -625,7 +1018,7 @@ async function syncMarketData({ force = false, silent = false } = {}) {
   if (!symbols.length) return;
 
   if (!silent || force) {
-    updateLiveChannel("market", "loading", "FMP quote 데이터를 동기화하고 있습니다.");
+    updateLiveChannel("market", "loading", "FMP 시세 데이터를 동기화하고 있습니다.");
     renderSidebar();
   }
 
@@ -633,7 +1026,7 @@ async function syncMarketData({ force = false, silent = false } = {}) {
     const { quotes, source } = await fetchBatchQuotes(symbols, state.live.apiKey);
 
     if (!quotes.length) {
-      throw new Error("quote 응답이 비어 있습니다.");
+      throw new Error("시세 응답이 비어 있습니다.");
     }
 
     const now = new Date().toISOString();
@@ -648,7 +1041,7 @@ async function syncMarketData({ force = false, silent = false } = {}) {
     updateLiveChannel(
       "market",
       "live",
-      `${quotes.length}/${symbols.length}개 종목을 실시간 quote로 동기화했습니다. source: ${source}.`,
+      `${quotes.length}/${symbols.length}개 종목을 실시간 시세로 동기화했습니다. 소스: ${formatQuoteSource(source)}.`,
       now
     );
 
@@ -755,7 +1148,7 @@ async function syncActiveCompanyChart({ force = false, silent = false } = {}) {
     company.liveChart = {
       series: normalizedCandles,
       syncedAt: now,
-      source: "FMP Daily OHLC",
+      source: "FMP 일봉 OHLC",
     };
     company.price.series = normalizedCandles.map((point) => ({
       label: point.label,
@@ -813,7 +1206,7 @@ async function syncActiveCompanyTranscript({ force = false, silent = false } = {
     updateLiveChannel(
       "transcript",
       "loading",
-      `${company.ticker} 실적 콜 transcript를 분석하고 있습니다.`
+      `${company.ticker} 실적 콜 원문을 분석하고 있습니다.`
     );
     renderSidebar();
     renderDetail();
@@ -824,7 +1217,7 @@ async function syncActiveCompanyTranscript({ force = false, silent = false } = {
     const latest = pickLatestTranscriptDate(transcriptDates);
 
     if (!latest) {
-      throw new Error("사용 가능한 earnings transcript가 없습니다.");
+      throw new Error("사용 가능한 실적 콜 원문이 없습니다.");
     }
 
     const transcript = await fetchTranscript(
@@ -835,7 +1228,7 @@ async function syncActiveCompanyTranscript({ force = false, silent = false } = {
     );
 
     if (!transcript?.content) {
-      throw new Error("transcript 원문이 비어 있습니다.");
+      throw new Error("실적 콜 원문이 비어 있습니다.");
     }
 
     const analyzed = buildTranscriptInsights(transcript, company);
@@ -844,7 +1237,7 @@ async function syncActiveCompanyTranscript({ force = false, silent = false } = {
     updateLiveChannel(
       "transcript",
       "live",
-      `${company.ticker} ${latest.year} Q${latest.quarter} transcript 분석을 완료했습니다.`,
+      `${company.ticker} ${latest.year}년 ${latest.quarter}분기 원문 분석을 완료했습니다.`,
       analyzed.transcriptMeta.analyzedAt
     );
 
@@ -931,34 +1324,34 @@ function renderSidebar() {
 
   elements.sidebar.innerHTML = `
     <div class="panel intro-panel">
-      <div class="eyebrow">Investor Intelligence Map</div>
+      <div class="eyebrow">투자 인텔리전스 맵</div>
       <h1>실시간 시세와 실적 콜이 붙는 주식 맵</h1>
       <p class="muted">
         지금은 ${
-          hasLiveApiKey() ? "FMP live mode" : "demo mode"
-        } 입니다. 시세는 공식 quote, 차트는 daily OHLC endpoint, 실적 분석은 earnings transcript endpoint를 사용하도록 연결했습니다.
+          hasLiveApiKey() ? "FMP 실시간 모드" : "데모 모드"
+        } 입니다. 시세는 공식 시세 엔드포인트, 차트는 일봉 OHLC 엔드포인트, 실적 분석은 실적 콜 원문 엔드포인트를 사용하도록 연결했습니다.
       </p>
       <div class="status-grid">
         ${renderStatus(
-          "Market feed",
+          "시세 피드",
           getStatusLabel(state.live.market.status),
           buildStatusDescription(state.live.market),
           state.live.market.status
         )}
         ${renderStatus(
-          "Intraday chart",
+          "상세 차트",
           getStatusLabel(state.live.chart.status),
           buildStatusDescription(state.live.chart),
           state.live.chart.status
         )}
         ${renderStatus(
-          "Earnings NLP",
+          "실적 분석",
           getStatusLabel(state.live.transcript.status),
           buildStatusDescription(state.live.transcript),
           state.live.transcript.status
         )}
         ${renderStatus(
-          "Capital lens",
+          "자금 흐름",
           getStatusLabel(state.live.capital.status),
           buildStatusDescription(state.live.capital),
           state.live.capital.status
@@ -968,9 +1361,9 @@ function renderSidebar() {
 
     <div class="panel api-panel">
       <div class="section-heading">
-        <h2>Live Data Setup</h2>
+        <h2>실시간 데이터 설정</h2>
         <span class="pill ${hasLiveApiKey() ? "" : "subtle"}">${
-          hasLiveApiKey() ? "FMP Connected" : "Demo Mode"
+          hasLiveApiKey() ? "FMP 연결됨" : "데모 모드"
         }</span>
       </div>
       <p class="muted">
@@ -978,7 +1371,7 @@ function renderSidebar() {
       </p>
       <form data-role="api-form" class="company-form api-form">
         <label>
-          <span>FMP API Key</span>
+          <span>FMP API 키</span>
           <input
             name="apiKey"
             type="password"
@@ -1005,29 +1398,29 @@ function renderSidebar() {
     <div class="panel form-panel">
       <div class="section-heading">
         <h2>기업 추가</h2>
-        <span class="pill subtle">Custom</span>
+        <span class="pill subtle">사용자 정의</span>
       </div>
       <p class="muted">회사명, 티커, 섹터, 핵심 투자 포인트만 넣으면 맵에 바로 올라갑니다.</p>
       <form data-role="company-form" class="company-form">
         <label>
-          <span>Company</span>
+          <span>기업명</span>
           <input name="name" type="text" placeholder="예: Broadcom" required />
         </label>
         <label>
-          <span>Ticker</span>
+          <span>티커</span>
           <input name="ticker" type="text" placeholder="AVGO" maxlength="10" required />
         </label>
         <label>
-          <span>Sector</span>
+          <span>섹터</span>
           <select name="sector">
             ${sectorFilters
               .filter((sector) => sector !== "All")
-              .map((sector) => `<option value="${sector}">${sector}</option>`)
+              .map((sector) => `<option value="${sector}">${formatSectorLabel(sector)}</option>`)
               .join("")}
           </select>
         </label>
         <label>
-          <span>Thesis</span>
+          <span>투자 포인트</span>
           <textarea
             name="thesis"
             rows="4"
@@ -1057,7 +1450,7 @@ function renderSidebar() {
                   `
                 )
                 .join("")
-            : `<div class="empty-state">카드의 Pin 버튼으로 기업을 고정해 둘 수 있어요.</div>`
+            : `<div class="empty-state">카드의 고정 버튼으로 기업을 상단에 고정할 수 있어요.</div>`
         }
       </div>
     </div>
@@ -1084,7 +1477,7 @@ function renderSidebar() {
                 `
               )
               .join("")
-          : `<div class="empty-state">카드의 Compare 버튼으로 최대 3개 기업을 올릴 수 있습니다.</div>`
+          : `<div class="empty-state">카드의 비교 버튼으로 최대 3개 기업을 담을 수 있습니다.</div>`
       }
     </div>
   `;
@@ -1104,23 +1497,23 @@ function renderHeader() {
     <div class="panel header-panel">
       <div class="header-top">
         <div>
-          <div class="eyebrow">Dashboard</div>
-          <h2>Stock Map Workspace</h2>
+          <div class="eyebrow">대시보드</div>
+          <h2>주식 맵 작업공간</h2>
           <p class="muted">${marketSummary}</p>
         </div>
         <div class="header-actions">
           <div class="view-toggle">
-            <button class="${state.activeView === "grid" ? "active" : ""}" data-action="set-view" data-view="grid">Cards</button>
-            <button class="${state.activeView === "map" ? "active" : ""}" data-action="set-view" data-view="map">Map</button>
+            <button class="${state.activeView === "grid" ? "active" : ""}" data-action="set-view" data-view="grid">카드</button>
+            <button class="${state.activeView === "map" ? "active" : ""}" data-action="set-view" data-view="map">맵</button>
           </div>
           <button class="secondary-button" data-action="toggle-compare-tray">
-            ${state.showCompareTray ? "Hide Compare" : "Show Compare"}
+            ${state.showCompareTray ? "비교 숨기기" : "비교 보기"}
           </button>
         </div>
       </div>
       <div class="toolbar">
         <label class="search-field">
-          <span>Search</span>
+          <span>검색</span>
           <input
             data-role="search-input"
             type="search"
@@ -1137,7 +1530,7 @@ function renderHeader() {
                   data-action="set-sector"
                   data-sector="${sector}"
                 >
-                  ${sector}
+                  ${formatSectorLabel(sector)}
                 </button>
               `
             )
@@ -1169,7 +1562,7 @@ function renderCompareTray() {
   if (!compareCompanies.length) {
     return `
       <div class="panel compare-tray">
-        <div class="tray-empty">아직 비교 대상이 없습니다. 카드의 Compare 버튼을 눌러 최대 3개까지 담아보세요.</div>
+        <div class="tray-empty">아직 비교 대상이 없습니다. 카드의 비교 버튼을 눌러 최대 3개까지 담아보세요.</div>
       </div>
     `;
   }
@@ -1177,7 +1570,7 @@ function renderCompareTray() {
   return `
     <div class="panel compare-tray">
       <div class="section-heading">
-        <h3>Quick Compare</h3>
+        <h3>빠른 비교</h3>
         <span class="pill">${compareCompanies.length}</span>
       </div>
       <div class="compare-grid">
@@ -1191,7 +1584,7 @@ function renderCompareTray() {
                     <strong>${company.name}</strong>
                     <span>${company.ticker}</span>
                   </button>
-                  <button class="ghost-button small" data-action="toggle-compare" data-id="${company.id}">Remove</button>
+                  <button class="ghost-button small" data-action="toggle-compare" data-id="${company.id}">제거</button>
                 </header>
                 <div class="compare-price-row">
                   <div class="price-tag">${formatDisplayPrice(company.price.current, { live: Boolean(company.liveQuote) })}</div>
@@ -1238,14 +1631,14 @@ function renderCardGrid(companies) {
           const isPinned = state.pinnedIds.includes(company.id);
           const isCompared = state.compareIds.includes(company.id);
           const isActive = state.activeCompanyId === company.id;
-          const sourceLabel = company.liveQuote ? "Live" : "Demo";
+          const sourceLabel = company.liveQuote ? "실시간" : "데모";
 
           return `
             <article class="panel company-card ${isActive ? "active" : ""}">
               <div class="card-top">
                 <div class="card-rank">#${index + 1}</div>
                 <div class="card-pill-row">
-                  <div class="pill subtle">${company.sector}</div>
+                  <div class="pill subtle">${formatSectorLabel(company.sector)}</div>
                   <div class="pill ${company.liveQuote ? "" : "subtle"}">${sourceLabel}</div>
                 </div>
               </div>
@@ -1281,10 +1674,10 @@ function renderCardGrid(companies) {
               </div>
               <div class="card-actions">
                 <button class="ghost-button" data-action="toggle-pin" data-id="${company.id}">
-                  ${isPinned ? "Unpin" : "Pin"}
+                  ${isPinned ? "고정 해제" : "고정"}
                 </button>
                 <button class="ghost-button" data-action="toggle-compare" data-id="${company.id}">
-                  ${isCompared ? "Compared" : "Compare"}
+                  ${isCompared ? "비교 중" : "비교"}
                 </button>
               </div>
             </article>
@@ -1311,14 +1704,14 @@ function renderNetworkWorkspace(companies) {
   return `
     <div class="panel map-panel">
       <div class="section-heading">
-        <h3>Relationship Map</h3>
-        <span class="pill">${companies.length} nodes</span>
+        <h3>관계 맵</h3>
+        <span class="pill">${companies.length}개 노드</span>
       </div>
       <p class="muted">
         관계 맵은 아직 정적 데이터 중심이지만, 실시간 시세는 카드와 상세 패널에 바로 반영됩니다.
       </p>
       <div class="map-canvas">
-        <svg viewBox="0 0 1000 620" role="img" aria-label="Company relationship map">
+        <svg viewBox="0 0 1000 620" role="img" aria-label="기업 관계 맵">
           <defs>
             <linearGradient id="mapEdge" x1="0%" x2="100%">
               <stop offset="0%" stop-color="#2dd49c" stop-opacity="0.65"></stop>
@@ -1357,7 +1750,7 @@ function renderNetworkWorkspace(companies) {
                     stroke-width="${isActive ? 2 : 1.2}"
                   ></circle>
                   <text x="${node.x}" y="${node.y - 6}" text-anchor="middle" class="map-node-title">${company.ticker}</text>
-                  <text x="${node.x}" y="${node.y + 16}" text-anchor="middle" class="map-node-subtitle">${company.sector}</text>
+                  <text x="${node.x}" y="${node.y + 16}" text-anchor="middle" class="map-node-subtitle">${formatSectorLabel(company.sector)}</text>
                   <foreignObject x="${node.x - 55}" y="${node.y - 55}" width="110" height="110">
                     <button class="map-node-button" data-action="select-company" data-id="${company.id}" aria-label="${company.name} 선택"></button>
                   </foreignObject>
@@ -1373,7 +1766,7 @@ function renderNetworkWorkspace(companies) {
             ([label, color]) => `
               <div class="legend-item">
                 <span class="legend-dot" style="background:${color}"></span>
-                <span>${label}</span>
+                <span>${formatRelationLabel(label)}</span>
               </div>
             `
           )
@@ -1396,32 +1789,32 @@ function renderDetail() {
   const priceDelta = getPriceDelta(company);
   const displayCandles = getDisplayCandles(company, state.activeChartRange);
   const chartSource = company.liveChart
-    ? "FMP daily OHLC chart"
+    ? "FMP 일봉 OHLC 차트"
     : company.liveQuote
-      ? "Live quote fallback"
-      : "Demo live feed";
+      ? "실시간 시세 폴백"
+      : "데모 시세";
 
   elements.detail.innerHTML = `
     <div class="panel detail-shell">
       <div class="detail-top">
         <div>
-          <div class="eyebrow">Company Detail</div>
+          <div class="eyebrow">기업 상세</div>
           <h2>${company.name}</h2>
-          <p class="muted">${company.ticker} · ${company.sector} · ${company.maturity}</p>
+          <p class="muted">${company.ticker} · ${formatSectorLabel(company.sector)} · ${company.maturity}</p>
         </div>
         <div class="detail-actions">
           <button class="ghost-button" data-action="toggle-pin" data-id="${company.id}">
-            ${state.pinnedIds.includes(company.id) ? "Unpin" : "Pin"}
+            ${state.pinnedIds.includes(company.id) ? "고정 해제" : "고정"}
           </button>
           <button class="ghost-button" data-action="toggle-compare" data-id="${company.id}">
-            ${state.compareIds.includes(company.id) ? "Compared" : "Compare"}
+            ${state.compareIds.includes(company.id) ? "비교 중" : "비교"}
           </button>
           <button class="ghost-button" data-action="sync-live">
-            Sync now
+            지금 동기화
           </button>
           ${
             company.isCustom
-              ? `<button class="ghost-button danger" data-action="remove-company" data-id="${company.id}">Remove</button>`
+              ? `<button class="ghost-button danger" data-action="remove-company" data-id="${company.id}">삭제</button>`
               : ""
           }
         </div>
@@ -1483,23 +1876,23 @@ function renderDetail() {
                       : ""
                   }`
                 : hasLiveApiKey()
-                  ? "실시간 quote와 OHLC 데이터를 이용해 캔들, 이동평균, 거래량 패널을 함께 표시합니다."
-                  : "API key를 넣으면 현재 데모 캔들 차트 자리에 실시간 OHLC / 거래량 데이터가 들어옵니다."
+                  ? "실시간 시세와 OHLC 데이터를 이용해 캔들, 이동평균, 거래량 패널을 함께 표시합니다."
+                  : "API 키를 넣으면 현재 데모 캔들 차트 자리에 실시간 OHLC / 거래량 데이터가 들어옵니다."
             }
           </p>
         </article>
 
         <aside class="hero-side">
           <article class="info-card">
-            <div class="eyebrow">Investment thesis</div>
+            <div class="eyebrow">투자 포인트</div>
             <p>${company.thesis}</p>
           </article>
           <article class="info-card">
-            <div class="eyebrow">Live snapshot</div>
+            <div class="eyebrow">실시간 스냅샷</div>
             ${renderLiveSnapshot(company)}
           </article>
           <article class="info-card">
-            <div class="eyebrow">Fast read</div>
+            <div class="eyebrow">빠른 요약</div>
             ${company.summaryMetrics
               .map(
                 (metric) => `
@@ -1523,7 +1916,7 @@ function renderDetail() {
                 data-action="set-tab"
                 data-tab="${tab.id}"
               >
-                ${tab.label}
+                ${formatTabLabel(tab.id, tab.label)}
               </button>
             `
           )
@@ -1539,32 +1932,32 @@ function renderDetail() {
 
 function renderLiveSnapshot(company) {
   if (!company.liveQuote) {
-    return `<p class="muted">실시간 quote가 아직 연결되지 않았습니다. API key를 저장하고 Sync now를 누르면 이 영역이 채워집니다.</p>`;
+    return `<p class="muted">실시간 시세가 아직 연결되지 않았습니다. API 키를 저장하고 지금 동기화를 누르면 이 영역이 채워집니다.</p>`;
   }
 
   return `
     <div class="metric-row">
-      <span>Quote Source</span>
-      <strong>${company.liveQuote.source ?? "unknown"}</strong>
+      <span>시세 소스</span>
+      <strong>${formatQuoteSource(company.liveQuote.source)}</strong>
     </div>
     <div class="metric-row">
-      <span>Day Range</span>
+      <span>당일 범위</span>
       <strong>${formatMoneyValue(company.liveQuote.dayLow, { live: true })} - ${formatMoneyValue(company.liveQuote.dayHigh, { live: true })}</strong>
     </div>
     <div class="metric-row">
-      <span>Open</span>
+      <span>시가</span>
       <strong>${formatMoneyValue(company.liveQuote.open, { live: true })}</strong>
     </div>
     <div class="metric-row">
-      <span>Volume</span>
+      <span>거래량</span>
       <strong>${formatCompactNumber(company.liveQuote.volume)}</strong>
     </div>
     <div class="metric-row">
-      <span>Market Cap</span>
-      <strong>${company.liveQuote.marketCap ? `$${formatCompactNumber(company.liveQuote.marketCap)}` : "N/A"}</strong>
+      <span>시가총액</span>
+      <strong>${company.liveQuote.marketCap ? `$${formatCompactNumber(company.liveQuote.marketCap)}` : "없음"}</strong>
     </div>
     <div class="metric-row">
-      <span>Synced</span>
+      <span>동기화 시각</span>
       <strong>${formatSyncTime(company.liveQuote.syncedAt)}</strong>
     </div>
   `;
@@ -1576,8 +1969,8 @@ function renderTabContent(company, activeSegment) {
   if (state.activeTab === "overview") {
     return `
       <div class="section-heading">
-        <h3>Part-based Breakdown</h3>
-        <span class="pill">${company.segments.length} parts</span>
+        <h3>파트별 분석</h3>
+        <span class="pill">${company.segments.length}개 파트</span>
       </div>
       <div class="segment-chip-row">
         ${company.segments
@@ -1607,7 +2000,7 @@ function renderTabContent(company, activeSegment) {
         </article>
         <article class="panel-inner">
           <div class="section-heading">
-            <h4>Current Read</h4>
+            <h4>현재 해석</h4>
             <span class="pill subtle">${earnings.tone}</span>
           </div>
           <div class="bullet-stack">
@@ -1653,8 +2046,8 @@ function renderTabContent(company, activeSegment) {
         </article>
         <article class="panel-inner">
           <div class="section-heading">
-            <h3>Keyword heat</h3>
-            <span class="pill subtle">Call analysis</span>
+            <h3>키워드 강도</h3>
+            <span class="pill subtle">콜 분석</span>
           </div>
           <div class="heat-list">
             ${earnings.keywordHeat
@@ -1690,7 +2083,7 @@ function renderTabContent(company, activeSegment) {
       <div class="two-column">
         <article class="panel-inner">
           <div class="section-heading">
-            <h4>Key takeaways</h4>
+            <h4>핵심 요약</h4>
           </div>
           <div class="bullet-stack">
             ${earnings.highlights
@@ -1700,7 +2093,7 @@ function renderTabContent(company, activeSegment) {
         </article>
         <article class="panel-inner">
           <div class="section-heading">
-            <h4>Watch items</h4>
+            <h4>체크 포인트</h4>
           </div>
           <div class="bullet-stack danger-stack">
             ${earnings.watchItems
@@ -1724,8 +2117,8 @@ function renderTabContent(company, activeSegment) {
       <div class="two-column relationship-layout">
         <article class="panel-inner">
           <div class="section-heading">
-            <h3>Network</h3>
-            <span class="pill">${relationCompanies.length} links</span>
+            <h3>네트워크</h3>
+            <span class="pill">${relationCompanies.length}개 연결</span>
           </div>
           <div class="relationship-map">
             ${renderRelationshipMap(company, relationCompanies)}
@@ -1733,8 +2126,8 @@ function renderTabContent(company, activeSegment) {
         </article>
         <article class="panel-inner">
           <div class="section-heading">
-            <h3>Connection notes</h3>
-            <span class="pill subtle">Structured</span>
+            <h3>연결 메모</h3>
+            <span class="pill subtle">구조화됨</span>
           </div>
           <div class="relation-list">
             ${relationCompanies
@@ -1744,7 +2137,7 @@ function renderTabContent(company, activeSegment) {
                     <div class="relation-header">
                       <div>
                         <strong>${peer.name}</strong>
-                        <span>${relation.type}</span>
+                        <span>${formatRelationLabel(relation.type)}</span>
                       </div>
                       <span class="pill subtle">${relation.strength}</span>
                     </div>
@@ -1762,12 +2155,12 @@ function renderTabContent(company, activeSegment) {
   if (state.activeTab === "capital") {
     return `
       <div class="live-banner static">
-        <strong>Capital Lens</strong>
+        <strong>자금 흐름</strong>
         <span>현재는 정적 메모 데이터입니다. 다음 단계에서 13F / 기관 보유 API를 붙일 수 있습니다.</span>
       </div>
       <div class="section-heading">
-        <h3>Who is investing / what capital matters?</h3>
-        <span class="pill">${company.investors.length} signals</span>
+        <h3>누가 투자하고 어떤 자금이 중요한가?</h3>
+        <span class="pill">${company.investors.length}개 신호</span>
       </div>
       <div class="capital-grid">
         ${company.investors
@@ -1789,8 +2182,8 @@ function renderTabContent(company, activeSegment) {
 
   return `
     <div class="section-heading">
-      <h3>What is the company doing now?</h3>
-      <span class="pill">${company.initiatives.length} tracks</span>
+      <h3>이 기업은 지금 무엇을 하고 있나?</h3>
+      <span class="pill">${company.initiatives.length}개 트랙</span>
     </div>
     <div class="project-grid">
       ${company.initiatives
@@ -1815,7 +2208,7 @@ function renderTranscriptBanner(company) {
   if (company.liveEarnings?.transcriptMeta) {
     return `
       <div class="live-banner live">
-        <strong>Live transcript analysis</strong>
+        <strong>실시간 원문 분석</strong>
         <span>
           ${
             company.liveEarnings.transcriptMeta.source
@@ -1835,8 +2228,8 @@ function renderTranscriptBanner(company) {
   if (!hasLiveApiKey()) {
     return `
       <div class="live-banner demo">
-        <strong>Demo earnings analysis</strong>
-        <span>API key를 넣으면 최신 earnings transcript를 불러와 이 영역을 자동 요약으로 채웁니다.</span>
+        <strong>데모 실적 분석</strong>
+        <span>API 키를 넣으면 최신 실적 콜 원문을 불러와 이 영역을 자동 요약으로 채웁니다.</span>
       </div>
     `;
   }
@@ -1844,7 +2237,7 @@ function renderTranscriptBanner(company) {
   if (state.live.transcript.status === "loading") {
     return `
       <div class="live-banner loading">
-        <strong>Transcript syncing</strong>
+        <strong>원문 동기화 중</strong>
         <span>${state.live.transcript.message}</span>
       </div>
     `;
@@ -1853,7 +2246,7 @@ function renderTranscriptBanner(company) {
   if (state.live.transcript.status === "error") {
     return `
       <div class="live-banner error">
-        <strong>Transcript sync error</strong>
+        <strong>원문 동기화 오류</strong>
         <span>${state.live.transcript.message}</span>
       </div>
     `;
@@ -1861,8 +2254,8 @@ function renderTranscriptBanner(company) {
 
   return `
     <div class="live-banner static">
-      <strong>Transcript ready</strong>
-      <span>Sync now를 누르거나 Earnings 탭을 다시 열면 최신 transcript 분석을 시도합니다.</span>
+      <strong>원문 분석 준비됨</strong>
+      <span>지금 동기화를 누르거나 실적 콜 탭을 다시 열면 최신 원문 분석을 시도합니다.</span>
     </div>
   `;
 }
@@ -1873,7 +2266,7 @@ function renderRelationshipMap(company, relationCompanies) {
   const radius = 145;
 
   return `
-    <svg viewBox="0 0 540 420" role="img" aria-label="${company.name} relationship map">
+    <svg viewBox="0 0 540 420" role="img" aria-label="${company.name} 관계 맵">
       <circle cx="${centerX}" cy="${centerY}" r="72" fill="rgba(61, 217, 165, 0.16)" stroke="#3dd9a5" stroke-width="2"></circle>
       <text x="${centerX}" y="${centerY - 4}" text-anchor="middle" class="map-node-title">${company.ticker}</text>
       <text x="${centerX}" y="${centerY + 18}" text-anchor="middle" class="map-node-subtitle">${company.name}</text>
@@ -1888,7 +2281,7 @@ function renderRelationshipMap(company, relationCompanies) {
             <line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="${color}" stroke-width="${1.5 + relation.strength / 34}" stroke-opacity="0.72"></line>
             <circle cx="${x}" cy="${y}" r="52" fill="rgba(10, 17, 19, 0.92)" stroke="${color}" stroke-width="1.4"></circle>
             <text x="${x}" y="${y - 4}" text-anchor="middle" class="map-node-title">${peer.ticker}</text>
-            <text x="${x}" y="${y + 16}" text-anchor="middle" class="map-node-subtitle">${relation.type}</text>
+            <text x="${x}" y="${y + 16}" text-anchor="middle" class="map-node-subtitle">${formatRelationLabel(relation.type)}</text>
           `;
         })
         .join("")}
@@ -2175,11 +2568,11 @@ function renderCandlestickChart(candles, company) {
               : ""
           )
           .join("")}
-        <text x="${padding.left}" y="${padding.top - 2}" class="candle-panel-label">Price</text>
-        <text x="${padding.left}" y="${volumeTop - 6}" class="candle-panel-label">Volume ${formatCompactNumber(
+        <text x="${padding.left}" y="${padding.top - 2}" class="candle-panel-label">가격</text>
+        <text x="${padding.left}" y="${volumeTop - 6}" class="candle-panel-label">거래량 ${formatCompactNumber(
           candles.reduce((sum, candle) => sum + (candle.volume || 0), 0)
         )}</text>
-        <text x="${width - 18}" y="${padding.top + 12}" text-anchor="end" class="candle-mode-label">Linear</text>
+        <text x="${width - 18}" y="${padding.top + 12}" text-anchor="end" class="candle-mode-label">선형</text>
       </svg>
     </div>
   `;
@@ -2265,12 +2658,12 @@ function renderStatus(label, stateLabel, description, tone = "static") {
 }
 
 function getStatusLabel(status) {
-  if (status === "live") return "Live";
-  if (status === "loading") return "Syncing";
-  if (status === "error") return "Error";
-  if (status === "idle") return "Ready";
-  if (status === "demo") return "Demo";
-  return "Static";
+  if (status === "live") return "실시간";
+  if (status === "loading") return "동기화 중";
+  if (status === "error") return "오류";
+  if (status === "idle") return "준비됨";
+  if (status === "demo") return "데모";
+  return "정적";
 }
 
 function buildStatusDescription(channel) {
