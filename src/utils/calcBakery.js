@@ -7,7 +7,7 @@ export function calcBakeryTotal(lines, bakeryList) {
         const priceMatch = line.match(/[0-9,]+/g)
 
         if (priceMatch) {
-          const price = parseInt(priceMatch[priceMatch.length - 1].replace(',', ''))
+          const price = parseInt(priceMatch[priceMatch.length - 1].replace(/,/g, ''))
           total += price
         }
       }

@@ -320,13 +320,19 @@ function flattenComputedItems(rows) {
   const flattened = []
 
   for (const row of rows || []) {
+    const isOption = !!row.isOption
+
     flattened.push({
       name: row.name,
       qty: row.qty,
-      amount: row.amount,
-      isOption: !!row.isOption,
-      optionCharge: Number(row.optionCharge || 0),
+      amount: Number(
+        isOption ? (row.amount || 0) : (row.baseAmount ?? row.amount ?? 0),
+      ),
+      isOption,
+      optionCharge: Number(isOption ? row.optionCharge || 0 : 0),
     })
+
+    if (isOption) continue
 
     for (const option of row.options || []) {
       flattened.push({

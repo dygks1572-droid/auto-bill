@@ -361,32 +361,31 @@ function hasBakeryNameHint(value) {
   return BAKERY_NAME_HINT_PATTERN.test(String(value ?? ''))
 }
 
-function canPromoteMatchToBakery(candidate, rawName) {
+function canPromoteMatchToBakery(candidate, rawName, { requireHint = false } = {}) {
   if (!candidate) return false
-  if (candidate.category === 'bakery' && candidate.countInBakeryTotal !== false) return true
-
-  if (candidate.category === 'review') {
-    return hasBakeryNameHint(`${rawName} ${candidate.name}`)
-  }
-
-  return false
+  if (candidate.category !== 'bakery') return false
+  if (candidate.countInBakeryTotal === false) return false
+  if (!requireHint) return true
+  return hasBakeryNameHint(`${rawName} ${candidate.name}`) || candidate.score >= 88
 }
 
 function resolveBakeryCandidate(rawName, matched, suggestions) {
-  if (canPromoteMatchToBakery(matched, rawName)) {
+  if (matched) {
     return {
       candidate: matched,
-      promoted: matched.category !== 'bakery' || matched.countInBakeryTotal === false,
+      promoted: false,
     }
   }
 
   const fallback = (suggestions || []).find(
-    (item) => item.score >= BAKERY_FALLBACK_THRESHOLD && canPromoteMatchToBakery(item, rawName),
+    (item) =>
+      item.score >= BAKERY_FALLBACK_THRESHOLD &&
+      canPromoteMatchToBakery(item, rawName, { requireHint: true }),
   )
 
   if (!fallback) {
     return {
-      candidate: matched,
+      candidate: null,
       promoted: false,
     }
   }

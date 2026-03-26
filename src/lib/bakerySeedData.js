@@ -54,7 +54,7 @@ export const BAKERY_INCLUDED = [
   '하트 초코 쿠키',
   '호두 크랜베리 깜빠뉴',
   '휘낭시에',
-  '휘낭시에 5종 set(구성변경불가)',
+  '휘낭시에 5종 세트(구성변경불가)',
 ]
 
 export const BAKERY_EXCLUDED = [
@@ -66,7 +66,7 @@ export const BAKERY_EXCLUDED = [
   '콜드브루 원액',
   '콜드브루 원액 1L',
   '라떼',
-  '마다가스카르빈 라떼',
+  '마다가스카르 바닐라빈 라떼',
   '비건라떼',
 ]
 
@@ -76,7 +76,7 @@ export const REVIEW_NEEDED = [
   '당근라페 샌드위치 (잠봉)',
   '생크림',
   '아보카도 샌드위치',
-  '오늘의 추억',
+  '오늘의 샐러드',
   '잠봉뵈르 샌드위치',
 ]
 
@@ -96,6 +96,12 @@ export const OPTION_NAMES = [
   '고르곤졸라크림치즈',
   '고르곤졸라 크림치즈',
 ]
+
+function seedKey(name) {
+  return String(name ?? '')
+    .replace(/\s+/g, '')
+    .toLowerCase()
+}
 
 const BASE_PRODUCT_SEEDS = [
   product('에그타르트', {
@@ -125,8 +131,14 @@ const BASE_PRODUCT_SEEDS = [
     ],
     group: 'pastry',
   }),
-  product('휘낭시에 5종 set(구성변경불가)', {
-    aliases: ['휘낭시에 5종 set', '휘낭시에 세트'],
+  product('휘낭시에 5종 세트(구성변경불가)', {
+    aliases: [
+      '휘낭시에 5종 세트',
+      '휘낭시에5종세트',
+      '휘낭시에 5종 set(구성변경불가)',
+      '휘낭시에 5종 set',
+      '휘낭시에 세트',
+    ],
     group: 'pastry-set',
   }),
   product('동물 쿠키', { group: 'cookie' }),
@@ -264,8 +276,13 @@ const BASE_PRODUCT_SEEDS = [
     group: 'coffee',
     countInBakeryTotal: false,
   }),
-  product('마다가스카르 바로빈 라떼', {
-    aliases: ['마다가스카르바닐라빈라떼', '바닐라빈 라떼'],
+  product('마다가스카르 바닐라빈 라떼', {
+    aliases: [
+      '마다가스카르바닐라빈라떼',
+      '마다가스카르 바로빈 라떼',
+      '마다가스카르빈 라떼',
+      '바닐라빈 라떼',
+    ],
     category: 'drink',
     group: 'coffee',
     countInBakeryTotal: false,
@@ -319,14 +336,14 @@ const BASE_PRODUCT_SEEDS = [
     aliases: ['아보카도샌드위치'],
     category: 'review',
     group: 'sandwich',
-    countInBakeryTotal: false,
+    countInBakeryTotal: true,
     reviewNeeded: true,
   }),
-  product('오늘의 추억', {
-    aliases: ['오늘의샐러드'],
+  product('오늘의 샐러드', {
+    aliases: ['오늘의샐러드', '오늘의 추억'],
     category: 'review',
     group: 'salad',
-    countInBakeryTotal: false,
+    countInBakeryTotal: true,
     reviewNeeded: true,
   }),
   product('잠봉뵈르 샌드위치', {
@@ -356,7 +373,7 @@ const BASE_PRODUCT_SEEDS = [
     ],
     category: 'review',
     group: 'sandwich',
-    countInBakeryTotal: false,
+    countInBakeryTotal: true,
     reviewNeeded: true,
   }),
   product('ICE', {
@@ -442,19 +459,28 @@ const catalogDerivedSeeds = PRODUCT_CATALOG.map((item) =>
   product(item.name, {
     aliases: item.aliases || [],
     category: item.category || 'bakery',
-    group: item.category || 'default',
+    group: item.group || item.category || 'default',
     countInBakeryTotal: item.countInBakeryTotal !== false,
+    reviewNeeded: item.reviewNeeded || item.category === 'review',
   }),
 )
 
-const bakeryMenuDerivedSeeds = BAKERY_MENU.map((name) =>
-  product(name, {
-    aliases: [name.replace(/\s+/g, '')].filter((alias) => alias !== name),
-    category: 'bakery',
-    group: 'legacy-menu',
-    countInBakeryTotal: true,
-  }),
+const explicitSeedLookup = new Map(
+  [...BASE_PRODUCT_SEEDS, ...catalogDerivedSeeds].map((item) => [seedKey(item.name), item]),
 )
+
+const bakeryMenuDerivedSeeds = BAKERY_MENU.map((name) => {
+  const explicit = explicitSeedLookup.get(seedKey(name))
+
+  return product(name, {
+    aliases: [name.replace(/\s+/g, '')].filter((alias) => alias && alias !== name),
+    category: explicit?.category || 'bakery',
+    group: explicit?.group || 'legacy-menu',
+    countInBakeryTotal: explicit ? explicit.countInBakeryTotal !== false : true,
+    reviewNeeded: explicit?.reviewNeeded || false,
+    optionLike: explicit?.optionLike || false,
+  })
+})
 
 export const DEFAULT_PRODUCT_SEEDS = Array.from(
   [...BASE_PRODUCT_SEEDS, ...catalogDerivedSeeds, ...bakeryMenuDerivedSeeds].reduce(
