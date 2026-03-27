@@ -4,49 +4,25 @@ const PRIMARY_MODEL = 'gpt-4o-mini'
 const SECONDARY_MODEL = 'gpt-4o-mini'
 const FALLBACK_MODEL = 'gpt-4o'
 
-const baseDeveloperPrompt = `
-You extract bakery receipt data and return JSON only.
+const baseDeveloperPrompt = [
+  'Extract Korean bakery/cafe receipt data. Return JSON only.',
+  'Detect source: 쿠팡이츠, 배민, 픽업, 매장 POS, or null.',
+  'Prefer total from labels: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
+  'rawItems: array of product name strings exactly as printed. Do NOT merge name+qty+price into one string. Each element is the product name only.',
+  'bakeryBreakdown: only solid bakery/pastry/bread items. Exclude all drinks (라떼, 아메리카노, 드립커피, 이지드립 etc), drink options (ICE, HOT, 샷추가), and delivery fees.',
+  'Bakery examples: 에그타르트, 마늘빵, 양버터, 베이커리 츄러스, 휘낭시에, 잠봉뵈르 샌드위치, 호두 크랜베리 깜빠뉴, 아보카도 샌드위치, 오늘의 샐러드.',
+  'Read Korean text exactly as printed. Do NOT hallucinate or abbreviate names. 잠봉뵈르 샌드위치 must not become 장별로 or 스딩워치. 이지드립 must not become 이즈치즈.',
+  'bakeryTotal = sum of all bakeryBreakdown amounts.',
+  'amount in bakeryBreakdown = unit price × qty for that item.',
+].join(' ')
 
-Rules:
-- Read item names, quantities, prices, totals.
-- Distinguish bakery items from non-bakery items.
-- Treat modifiers/options like ICE, HOT, shot add-ons, size changes as options, not bakery products.
-- Keep raw item names as they appear when possible.
-- Infer source platform if visible.
+const rescueDeveloperPrompt = [
+  baseDeveloperPrompt,
+  'Re-read the receipt from scratch. Focus on item rows, totals, and bakery classification.',
+  'Be extra careful with: 잠봉뵈르 샌드위치, 호두 크랜베리 깜빠뉴, 이지드립, 휘낭시에.',
+  'Ensure rawItems contains clean product names only, never merged with qty or price.',
+].join(' ')
 
-Return this JSON shape only:
-{
-  "source": string | null,
-  "orderTotal": number,
-  "rawItems": string[],
-  "bakeryTotal": number,
-  "bakeryBreakdown": [
-    { "name": string, "qty": number, "amount": number }
-  ]
-}
-`
-
-const rescueDeveloperPrompt = `
-Return JSON only.
-
-Re-check the receipt carefully.
-Focus on:
-- order total
-- item lines
-- bakery items only
-- exclude drink options/modifiers from bakery items
-
-Use this exact JSON shape:
-{
-  "source": string | null,
-  "orderTotal": number,
-  "rawItems": string[],
-  "bakeryTotal": number,
-  "bakeryBreakdown": [
-    { "name": string, "qty": number, "amount": number }
-  ]
-}
-`
 
 function corsHeaders() {
   return {
@@ -226,7 +202,7 @@ async function parseWithTiering({ apiKey, imageBase64, mimeType }) {
     {
       model: PRIMARY_MODEL,
       prompt: baseDeveloperPrompt,
-      detail: 'low',
+      detail: 'high',
     },
     {
       model: SECONDARY_MODEL,
