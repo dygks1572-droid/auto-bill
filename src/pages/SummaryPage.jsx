@@ -90,6 +90,11 @@ export default function SummaryPage() {
           <h3>베이커리 합계</h3>
           <strong>{formatWon(summary.bakeryTotal)}원</strong>
         </div>
+
+        <div className="card bigNumber">
+          <h3>커피 합계</h3>
+          <strong>{formatWon(summary.orderTotal - summary.bakeryTotal)}원</strong>
+        </div>
       </div>
 
       <div className="card">
