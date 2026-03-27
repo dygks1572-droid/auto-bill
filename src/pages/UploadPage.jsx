@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createReceiptsBatch, listenReceiptsByDate } from '../lib/receipts'
 import { listenProducts } from '../lib/products'
-import { buildBakeryComputation, learnCatalogAlias } from '../lib/bakeryMatcher'
-import { buildAutofillStateFromParsed, normalizeAutoFilledItems, parseReceiptImage } from '../lib/receiptAutofillClient'
+import { buildAutofillStateFromParsed, parseReceiptImage } from '../lib/receiptAutofillClient'
 
 function todayString() {
   const now = new Date()
@@ -76,14 +75,13 @@ export default function UploadPage() {
   const summary = useMemo(() => {
     return uploads.reduce(
       (acc, entry) => {
-        const computed = buildBakeryComputation(entry.items, products)
         acc.orderTotal += Number(entry.orderTotal || 0)
-        acc.bakeryTotal += computed.bakeryTotal
+        acc.bakeryTotal += Number(entry.parsedReceipt?.bakeryTotal || 0)
         return acc
       },
       { orderTotal: 0, bakeryTotal: 0 },
     )
-  }, [products, uploads])
+  }, [uploads])
 
   function patchUpload(id, updater) {
     setUploads((prev) => prev.map((entry) => (entry.id === id ? updater(entry) : entry)))
@@ -160,11 +158,7 @@ export default function UploadPage() {
     }))
   }
 
-  function applySuggestedItemName(uploadId, itemIndex, rawName, suggestionName) {
-    learnCatalogAlias(rawName, suggestionName)
-    updateItem(uploadId, itemIndex, 'name', suggestionName)
-    setMessage(`학습 별칭 저장: ${rawName} -> ${suggestionName}`)
-  }
+
 
   function addItemRow(uploadId) {
     patchUpload(uploadId, (entry) => ({
@@ -212,22 +206,23 @@ export default function UploadPage() {
 
     try {
       const payloads = uploads.map((entry) => {
-        const computed = buildBakeryComputation(entry.items, products)
+        const bakeryBreakdown = entry.parsedReceipt?.bakeryBreakdown || []
+        const bakeryTotal = Number(entry.parsedReceipt?.bakeryTotal || 0)
 
         return {
           source: entry.autoFilled.source || 'manual',
           imageName: entry.file?.name || '',
           orderedDate: entry.autoFilled.orderedDate || todayString(),
           orderTotal: entry.orderTotal,
-          bakeryTotal: computed.bakeryTotal,
-          bakeryBreakdown: computed.bakeryBreakdown,
-          items: computed.items,
+          bakeryTotal,
+          bakeryBreakdown,
+          items: entry.items,
           analysis: entry.parsedReceipt
             ? {
                 source: entry.parsedReceipt.source || null,
-                orderedDate: entry.parsedReceipt.orderedDate || null,
+                orderedDate: null,
                 orderTotal: entry.parsedReceipt.orderTotal ?? null,
-                items: entry.parsedReceipt.items || [],
+                items: entry.parsedReceipt.rawItems || [],
               }
             : null,
           note: entry.note,
@@ -308,17 +303,14 @@ export default function UploadPage() {
         {uploads.length > 0 ? (
           <div className="uploadList">
             {uploads.map((entry, uploadIndex) => {
-              const computed = buildBakeryComputation(entry.items, products)
+              const bakeryBreakdown = entry.parsedReceipt?.bakeryBreakdown || []
+              const bakeryTotal = Number(entry.parsedReceipt?.bakeryTotal || 0)
+              const rawItems = entry.parsedReceipt?.rawItems || []
               const itemCount = entry.items.filter((item) => item.name).length
-              const parsedItems = entry.parsedReceipt?.items || []
-              const computedParsedItems = buildBakeryComputation(
-                normalizeAutoFilledItems(parsedItems),
-                products,
-              ).items
-              const recognizedItemCount = computedParsedItems.filter((item) => item.name && !item.isOption).length
-              const recognizedOptionCount = computedParsedItems.filter((item) => item.isOption).length
-              const matchedBakeryCount = computed.bakeryBreakdown.length
-              const amountGap = Number(entry.orderTotal || 0) - computed.bakeryTotal
+              const recognizedItemCount = rawItems.length
+              const recognizedOptionCount = 0
+              const matchedBakeryCount = bakeryBreakdown.length
+              const amountGap = Number(entry.orderTotal || 0) - bakeryTotal
 
               return (
                 <div key={entry.id} className="card nestedCard uploadCard">
@@ -422,32 +414,34 @@ export default function UploadPage() {
                           <div className="parseResult compactParseCard">
                             <div className="analysisListHeader">
                               <strong>자동 추출 품목</strong>
-                              <span>{parsedItems.length}줄</span>
+                              <span>{rawItems.length}줄</span>
                             </div>
-                            {computedParsedItems.length ? (
+                            {rawItems.length ? (
                               <ul className="analysisLineList">
-                                {computedParsedItems.map((item, index) => (
-                                  <li key={`${item.name}-${index}`} className={item.isOption ? 'isOptionRow' : ''}>
-                                    <div>
-                                      <strong>{item.name}</strong>
-                                      <span>
-                                        {item.isOption
-                                          ? item.matchedBakeryName
-                                            ? `옵션 행 / ${item.matchedBakeryName}`
-                                            : '옵션 행'
-                                          : item.isBakery
-                                            ? `매칭 베이커리 / ${item.matchedBakeryName || item.name}`
-                                            : item.suggestions?.length
-                                              ? '자동 매칭 후보 있음'
-                                              : '일반 품목'}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span>{item.qty}개</span>
-                                      <strong>{item.amount.toLocaleString()}원</strong>
-                                    </div>
-                                  </li>
-                                ))}
+                                {rawItems.map((rawName, index) => {
+                                  const isBakery = bakeryBreakdown.some(
+                                    (b) => b.name === rawName || rawName.includes(b.name) || b.name.includes(rawName),
+                                  )
+                                  const bakeryItem = bakeryBreakdown.find(
+                                    (b) => b.name === rawName || rawName.includes(b.name) || b.name.includes(rawName),
+                                  )
+                                  return (
+                                    <li key={`${rawName}-${index}`}>
+                                      <div>
+                                        <strong>{rawName}</strong>
+                                        <span>
+                                          {isBakery
+                                            ? `매칭 베이커리 / ${bakeryItem?.name || rawName}`
+                                            : '일반 품목'}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span>{bakeryItem?.qty || 1}개</span>
+                                        <strong>{(bakeryItem?.amount || 0).toLocaleString()}원</strong>
+                                      </div>
+                                    </li>
+                                  )
+                                })}
                               </ul>
                             ) : (
                               <p>추출된 품목이 없습니다.</p>
@@ -489,7 +483,9 @@ export default function UploadPage() {
                         </div>
 
                         {entry.items.map((item, index) => {
-                          const matched = buildBakeryComputation([item], products).items[0]
+                          const isBakeryItem = bakeryBreakdown.some(
+                            (b) => b.name === item.name || item.name.includes(b.name) || b.name.includes(item.name),
+                          )
 
                           return (
                             <div key={`${entry.id}-${index}`} className="itemRowCard">
@@ -526,34 +522,12 @@ export default function UploadPage() {
                               </div>
 
                               <div className="itemMatch">
-                                {matched?.isOption || item.isOption ? (
-                                  <span className="tag normal">옵션 행 인식</span>
-                                ) : matched?.isBakery ? (
-                                  <span className="tag bakery">베이커리 매칭: {matched.matchedBakeryName}</span>
-                                ) : matched?.suggestions?.length ? (
-                                  <span className="tag normal">자동 매칭 실패</span>
+                                {isBakeryItem ? (
+                                  <span className="tag bakery">베이커리 매칭</span>
                                 ) : (
-                                  <span className="tag normal">베이커리 아님</span>
+                                  <span className="tag normal">일반 품목</span>
                                 )}
                               </div>
-
-                              {matched?.suggestions?.length && !matched?.isBakery && !matched?.isOption && !item.isOption ? (
-                                <div className="suggestionGroup">
-                                  <p className="suggestionLabel">추천 후보</p>
-                                  <div className="suggestionChips">
-                                    {matched.suggestions.map((suggestion) => (
-                                      <button
-                                        key={`${entry.id}-${index}-${suggestion.name}`}
-                                        type="button"
-                                        className="suggestionChip"
-                                        onClick={() => applySuggestedItemName(entry.id, index, item.name, suggestion.name)}
-                                      >
-                                        {suggestion.name}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
 
                               <button type="button" onClick={() => removeItemRow(entry.id, index)}>
                                 삭제
@@ -566,11 +540,11 @@ export default function UploadPage() {
                       <div className="card nestedCard">
                         <h3>자동 계산</h3>
                         <p>
-                          베이커리 합계: <strong>{computed.bakeryTotal.toLocaleString()}원</strong>
+                          베이커리 합계: <strong>{bakeryTotal.toLocaleString()}원</strong>
                         </p>
-                        {computed.bakeryBreakdown.length > 0 ? (
+                        {bakeryBreakdown.length > 0 ? (
                           <ul className="miniList">
-                            {computed.bakeryBreakdown.map((item) => (
+                            {bakeryBreakdown.map((item) => (
                               <li key={`${entry.id}-${item.name}`}>
                                 {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
                               </li>

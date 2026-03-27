@@ -1,39 +1,59 @@
-const receiptSchema = {
-  name: 'receipt_extraction',
-  schema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      source: {
-        type: 'string',
-        enum: ['쿠팡이츠', '배민', '픽업', '매장 POS', '알 수 없음'],
-      },
-      orderedDate: {
-        type: ['string', 'null'],
-        description: 'YYYY-MM-DD if visible, otherwise null.',
-      },
-      orderTotal: {
-        type: ['integer', 'null'],
-      },
-      items: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            name: { type: 'string' },
-            qty: { type: 'integer' },
-            amount: { type: 'integer' },
-            isOption: { type: 'boolean' },
-            optionCharge: { type: 'integer' },
-          },
-          required: ['name', 'qty', 'amount', 'isOption', 'optionCharge'],
-        },
-      },
-    },
-    required: ['source', 'orderedDate', 'orderTotal', 'items'],
-  },
-  strict: true,
+const OPENAI_API_URL = 'https://api.openai.com/v1/responses'
+
+const PRIMARY_MODEL = 'gpt-4o-mini'
+const SECONDARY_MODEL = 'gpt-4o-mini'
+const FALLBACK_MODEL = 'gpt-4o'
+
+const baseDeveloperPrompt = `
+You extract bakery receipt data and return JSON only.
+
+Rules:
+- Read item names, quantities, prices, totals.
+- Distinguish bakery items from non-bakery items.
+- Treat modifiers/options like ICE, HOT, shot add-ons, size changes as options, not bakery products.
+- Keep raw item names as they appear when possible.
+- Infer source platform if visible.
+
+Return this JSON shape only:
+{
+  "source": string | null,
+  "orderTotal": number,
+  "rawItems": string[],
+  "bakeryTotal": number,
+  "bakeryBreakdown": [
+    { "name": string, "qty": number, "amount": number }
+  ]
+}
+`
+
+const rescueDeveloperPrompt = `
+Return JSON only.
+
+Re-check the receipt carefully.
+Focus on:
+- order total
+- item lines
+- bakery items only
+- exclude drink options/modifiers from bakery items
+
+Use this exact JSON shape:
+{
+  "source": string | null,
+  "orderTotal": number,
+  "rawItems": string[],
+  "bakeryTotal": number,
+  "bakeryBreakdown": [
+    { "name": string, "qty": number, "amount": number }
+  ]
+}
+`
+
+function corsHeaders() {
+  return {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+  }
 }
 
 function json(data, status = 200) {
@@ -46,74 +66,87 @@ function json(data, status = 200) {
   })
 }
 
-function corsHeaders() {
+function safeJsonParse(text) {
+  if (!text) return null
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) return null
+
+    try {
+      return JSON.parse(match[0])
+    } catch {
+      return null
+    }
+  }
+}
+
+function normalizeParsedResult(result) {
+  if (!result || typeof result !== 'object') return null
+
+  const bakeryBreakdown = Array.isArray(result.bakeryBreakdown)
+    ? result.bakeryBreakdown
+        .filter(Boolean)
+        .map((item) => ({
+          name: typeof item.name === 'string' ? item.name.trim() : '',
+          qty: Number(item.qty) || 0,
+          amount: Number(item.amount) || 0,
+        }))
+        .filter((item) => item.name && item.qty >= 0 && item.amount >= 0)
+    : []
+
   return {
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST,OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    source: typeof result.source === 'string' ? result.source.trim() : null,
+    orderTotal: Number(result.orderTotal) || 0,
+    rawItems: Array.isArray(result.rawItems)
+      ? result.rawItems.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim())
+      : [],
+    bakeryTotal: Number(result.bakeryTotal) || 0,
+    bakeryBreakdown,
   }
 }
 
-function extractStructuredText(payload) {
-  if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
-    return payload.output_text
+function shouldRetryParsedResult(result) {
+  if (!result) return true
+
+  if (!Number.isFinite(result.orderTotal) || result.orderTotal <= 0) return true
+  if (!Array.isArray(result.rawItems) || result.rawItems.length === 0) return true
+  if (!Number.isFinite(result.bakeryTotal) || result.bakeryTotal < 0) return true
+
+  const breakdownSum = Array.isArray(result.bakeryBreakdown)
+    ? result.bakeryBreakdown.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+    : 0
+
+  if (result.bakeryTotal > 0 && (!result.bakeryBreakdown || result.bakeryBreakdown.length === 0)) {
+    return true
   }
 
-  const content = payload?.output?.flatMap((message) => message?.content || []) || []
-  const textNode = content.find((node) => typeof node?.text === 'string')
-  return textNode?.text || ''
-}
+  if (result.bakeryBreakdown?.length > 0 && breakdownSum === 0) {
+    return true
+  }
 
-function normalizeName(value) {
-  return String(value || '')
-    .replace(/\s+/g, '')
-    .replace(/[0-9,원()+-]/g, '')
-    .trim()
-}
-
-function hasSuspiciousItems(items) {
-  const suspiciousPatterns = [/스딩워치/, /장볼빠른/, /그래백리/, /깨비빔밥/, /이즈드랍/, /세드위치/]
-
-  return (items || []).some((item) => {
-    const name = normalizeName(item?.name)
-    return suspiciousPatterns.some((pattern) => pattern.test(name))
-  })
-}
-
-function getParseScore(parsed) {
-  const items = Array.isArray(parsed?.items) ? parsed.items : []
-  const nonOptionItems = items.filter((item) => !item?.isOption && String(item?.name || '').trim())
-  const hasOptions = items.some((item) => item?.isOption)
-
-  let score = 0
-  if (parsed?.orderTotal && parsed.orderTotal > 0) score += 3
-  if (nonOptionItems.length) score += 3
-  score += Math.min(nonOptionItems.length, 4)
-  if (hasOptions) score += 1
-  if (!hasSuspiciousItems(items)) score += 2
-  return score
-}
-
-function shouldRetryParsedResult(parsed) {
-  const items = Array.isArray(parsed?.items) ? parsed.items : []
-  const nonOptionItems = items.filter((item) => !item?.isOption && String(item?.name || '').trim())
-  const hasOptions = items.some((item) => item?.isOption)
-
-  if (!items.length) return true
-  if (!parsed?.orderTotal || parsed.orderTotal <= 0) return true
-  if (!nonOptionItems.length) return true
-  if (hasSuspiciousItems(items)) return true
-  if (nonOptionItems.length === 1 && hasOptions) return true
+  if (result.bakeryTotal > 0 && Math.abs(breakdownSum - result.bakeryTotal) > 100) {
+    return true
+  }
 
   return false
 }
 
-async function requestReceiptParse({ env, imageBase64, mimeType, developerPrompt, userPrompt, maxOutputTokens, model }) {
-  const openaiResponse = await fetch('https://api.openai.com/v1/responses', {
+async function callOpenAI({
+  apiKey,
+  model,
+  developerPrompt,
+  imageBase64,
+  mimeType,
+  detail = 'low',
+}) {
+  const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
@@ -126,13 +159,13 @@ async function requestReceiptParse({ env, imageBase64, mimeType, developerPrompt
           role: 'user',
           content: [
             {
-              type: 'input_text',
-              text: userPrompt,
-            },
-            {
               type: 'input_image',
               image_url: `data:${mimeType};base64,${imageBase64}`,
-              detail: env.OPENAI_IMAGE_DETAIL || 'high',
+              detail,
+            },
+            {
+              type: 'input_text',
+              text: 'Extract the receipt data and return JSON only.',
             },
           ],
         },
@@ -140,21 +173,100 @@ async function requestReceiptParse({ env, imageBase64, mimeType, developerPrompt
       text: {
         format: {
           type: 'json_schema',
-          ...receiptSchema,
+          name: 'receipt_parse',
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              source: { type: ['string', 'null'] },
+              orderTotal: { type: 'number' },
+              rawItems: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              bakeryTotal: { type: 'number' },
+              bakeryBreakdown: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: 'string' },
+                    qty: { type: 'number' },
+                    amount: { type: 'number' },
+                  },
+                  required: ['name', 'qty', 'amount'],
+                },
+              },
+            },
+            required: ['source', 'orderTotal', 'rawItems', 'bakeryTotal', 'bakeryBreakdown'],
+          },
         },
       },
-      max_output_tokens: maxOutputTokens,
     }),
   })
 
-  if (!openaiResponse.ok) {
-    const detail = await openaiResponse.text()
-    throw new Error(detail || 'OpenAI request failed')
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenAI API error ${response.status}: ${errorText}`)
   }
 
-  const payload = await openaiResponse.json()
-  const text = extractStructuredText(payload)
-  return JSON.parse(text)
+  const data = await response.json()
+
+  const outputText =
+    data.output_text ||
+    data.output?.flatMap((item) => item.content || []).find((c) => c.type === 'output_text')?.text ||
+    ''
+
+  return safeJsonParse(outputText)
+}
+
+async function parseWithTiering({ apiKey, imageBase64, mimeType }) {
+  const attempts = [
+    {
+      model: PRIMARY_MODEL,
+      prompt: baseDeveloperPrompt,
+      detail: 'low',
+    },
+    {
+      model: SECONDARY_MODEL,
+      prompt: rescueDeveloperPrompt,
+      detail: 'high',
+    },
+    {
+      model: FALLBACK_MODEL,
+      prompt: rescueDeveloperPrompt,
+      detail: 'high',
+    },
+  ]
+
+  let lastResult = null
+  let lastError = null
+
+  for (const attempt of attempts) {
+    try {
+      const raw = await callOpenAI({
+        apiKey,
+        model: attempt.model,
+        developerPrompt: attempt.prompt,
+        imageBase64,
+        mimeType,
+        detail: attempt.detail,
+      })
+
+      const normalized = normalizeParsedResult(raw)
+      lastResult = normalized
+
+      if (!shouldRetryParsedResult(normalized)) {
+        return normalized
+      }
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastResult) return lastResult
+  throw lastError || new Error('Failed to parse receipt')
 }
 
 export async function onRequestOptions() {
@@ -167,91 +279,28 @@ export async function onRequestOptions() {
 export async function onRequestPost(context) {
   try {
     const { request, env } = context
-    const body = await request.json()
-    const { imageBase64, mimeType = 'image/jpeg', fileName = 'receipt.jpg' } = body || {}
+    const apiKey = env.OPENAI_API_KEY
 
-    if (!env.OPENAI_API_KEY) {
-      return json({ error: 'OPENAI_API_KEY is missing' }, 500)
+    if (!apiKey) {
+      return json({ error: 'Missing OPENAI_API_KEY' }, 500)
     }
+
+    const body = await request.json()
+    const imageBase64 = body?.imageBase64
+    const mimeType = body?.mimeType || 'image/jpeg'
 
     if (!imageBase64) {
-      return json({ error: 'imageBase64 is required' }, 400)
+      return json({ error: 'Missing imageBase64' }, 400)
     }
 
-    const baseDeveloperPrompt = [
-      'Extract only visible data from a Korean cafe or bakery receipt.',
-      'Detect source, orderedDate, orderTotal, and item rows.',
-      'Common layouts: Coupang Eats short slip, Baemin long receipt, pickup slip, store POS.',
-      'Prefer total labels in this order: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
-      'Do not add unreadable or missing text.',
-      'Include product rows and option rows.',
-      'Rows starting with + or ㄴ are options with isOption=true.',
-      'For financier options, treat rows like 플레인 +0, 무화과 +400원, 약과 +400원, 발로나초코 +800원, 고르곤졸라크림치즈 +600원 as option rows with isOption=true and optionCharge set to the surcharge.',
-      'Also treat rows like +0 플레인, +400 무화과, +400 약과, +800 발로나초코, +600 고르곤졸라크림치즈 and 휘낭시에 플레인/무화과/약과/발로나초코/고르곤졸라크림치즈 as financier option rows when they appear under a financier item.',
-      'If a receipt shows 휘낭시에 as the base item and the flavor appears on the next line, return the base item row and a separate option row instead of merging them.',
-      'If an option surcharge is visible, copy it to optionCharge even when the option row amount is 0.',
-      'Use qty=1 when quantity is unclear.',
-      'Do not include delivery fee unless the chosen total includes it.',
-      'orderedDate must be YYYY-MM-DD or null.',
-      'Preserve line-by-line row structure when visible.',
-      'Prefer reading the exact printed Korean text over guessing similar words.',
-      'For long names (e.g., "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립"), do NOT abbreviate, cut, or hallucinate words (like 스딩워치, 장볼빠른, 세드위치, 깨비빔밥, 이즈드랍). Extract them exactly as printed including spaces.',
-      'Regular main products MUST have isOption=false. ONLY set isOption=true for sub-options starting with "+" or "ㄴ" (e.g., "ㄴ 이웃 블렌드(달콤)"). even if amount is 0, they are options. If no quantity is visible for the option, use qty=1.',
-      'When product names are hard to read, prefer the visible letters and spacing rather than replacing them with generic words.',
-      'If the same product name appears on multiple separate rows each with its own quantity and price, every row is a distinct main item with isOption=false — do NOT mark the second or later occurrence as an option.',
-    ].join(' ')
-
-    const primaryUserPrompt = `Analyze receipt image ${fileName} carefully and return the schema only. Read small, faint, low-contrast, and tightly packed text carefully.`
-    const model = env.OPENAI_MODEL || 'gpt-4.1'
-
-    let parsed
-    try {
-      parsed = await requestReceiptParse({
-        env,
-        imageBase64,
-        mimeType,
-        developerPrompt: baseDeveloperPrompt,
-        userPrompt: primaryUserPrompt,
-        maxOutputTokens: 1500,
-        model,
-      })
-    } catch (error) {
-      return json({ error: 'OpenAI request failed', detail: error?.message || 'Unknown parse error' }, 500)
-    }
-
-    if (shouldRetryParsedResult(parsed)) {
-      const rescueDeveloperPrompt = [
-        baseDeveloperPrompt,
-        'Re-read the receipt from scratch when the first extraction looks weak.',
-        'Focus on item rows, option rows, and total row.',
-        'Do not collapse multiple lines into one item if separate rows are visible.',
-        'If a product name is partially unclear, keep the closest visible spelling from the receipt rather than inventing a new word.',
-        'Be extra careful with bakery names, sandwich names, drip coffee names, and financier option rows.',
-        'Ensure "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립" are read correctly and not misread. Options with "ㄴ" or "+" need qty=1 if missing.',
-      ].join(' ')
-      const rescueUserPrompt = `Re-analyze ${fileName} from scratch. Double-check every visible item row, option row, and total row before returning the schema only.`
-
-      try {
-        const retried = await requestReceiptParse({
-          env,
-          imageBase64,
-          mimeType,
-          developerPrompt: rescueDeveloperPrompt,
-          userPrompt: rescueUserPrompt,
-          maxOutputTokens: 1900,
-          model: env.OPENAI_RESCUE_MODEL || model,
-        })
-
-        if (getParseScore(retried) >= getParseScore(parsed)) {
-          parsed = retried
-        }
-      } catch (error) {
-        console.warn('Receipt rescue parse failed', error)
-      }
-    }
+    const parsed = await parseWithTiering({
+      apiKey,
+      imageBase64,
+      mimeType,
+    })
 
     return json({ ok: true, parsed })
   } catch (error) {
-    return json({ error: error?.message || 'Unknown server error' }, 500)
+    return json({ error: error?.message || 'Unknown error' }, 500)
   }
 }

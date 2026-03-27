@@ -1,8 +1,8 @@
 import { buildBakeryComputation } from './bakeryMatcher'
 
 const RECEIPT_API_URL = import.meta.env.VITE_RECEIPT_API_URL || '/api/parse-receipt'
-const MAX_RECEIPT_EDGE = 2100
-const RECEIPT_JPEG_QUALITY = 0.9
+const MAX_RECEIPT_EDGE = 1600
+const RECEIPT_JPEG_QUALITY = 0.8
 const ANALYSIS_MAX_EDGE = 2200
 const ANDROID_MAX_RECEIPT_EDGE = 2600
 const ANDROID_RECEIPT_JPEG_QUALITY = 0.96
@@ -349,16 +349,46 @@ function flattenComputedItems(rows) {
 }
 
 export function buildAutofillStateFromParsed(parsed, products) {
-  const items = normalizeAutoFilledItems(parsed?.items)
-  const bakery = buildBakeryComputation(items, products)
+  const rawItems = parsed?.rawItems || []
+  const bakeryBreakdown = parsed?.bakeryBreakdown || []
+  const bakeryTotal = Number(parsed?.bakeryTotal || 0)
+
+  const items = rawItems.map((rawName) => {
+    const bakeryMatch = bakeryBreakdown.find(
+      (b) => b.name === rawName || rawName.includes(b.name) || b.name.includes(rawName),
+    )
+
+    return {
+      name: rawName,
+      qty: bakeryMatch?.qty || 1,
+      amount: bakeryMatch?.amount || 0,
+      isOption: false,
+      optionCharge: 0,
+    }
+  })
+
+  for (const b of bakeryBreakdown) {
+    const alreadyInItems = items.some(
+      (item) => item.name === b.name || item.name.includes(b.name) || b.name.includes(item.name),
+    )
+    if (!alreadyInItems) {
+      items.push({
+        name: b.name,
+        qty: b.qty || 1,
+        amount: b.amount || 0,
+        isOption: false,
+        optionCharge: 0,
+      })
+    }
+  }
 
   return {
     source: parsed?.source || 'manual',
-    orderedDate: parsed?.orderedDate || '',
+    orderedDate: '',
     orderTotal: parsed?.orderTotal || 0,
-    items: flattenComputedItems(bakery.items),
-    bakeryTotal: bakery.bakeryTotal,
-    bakeryBreakdown: bakery.bakeryBreakdown,
+    items: items.length ? items : [{ name: '', qty: 1, amount: '', isOption: false, optionCharge: 0 }],
+    bakeryTotal,
+    bakeryBreakdown,
     note: '',
     confidence: items.length ? 1 : 0,
   }
