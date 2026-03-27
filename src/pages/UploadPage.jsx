@@ -547,6 +547,15 @@ export default function UploadPage() {
                             {bakeryBreakdown.map((item) => (
                               <li key={`${entry.id}-${item.name}`}>
                                 {item.name} / {item.qty}개 / {item.amount.toLocaleString()}원
+                                {item.options?.length > 0 && (
+                                  <ul className="optionList">
+                                    {item.options.map((opt) => (
+                                      <li key={`${entry.id}-${item.name}-${opt.name}`}>
+                                        ㄴ {opt.name} {opt.optionCharge > 0 ? `+${opt.optionCharge.toLocaleString()}원` : ''}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
                               </li>
                             ))}
                           </ul>
