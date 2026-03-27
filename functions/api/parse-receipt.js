@@ -125,10 +125,12 @@ async function requestReceiptParse({ env, imageBase64, mimeType, developerPrompt
         {
           role: 'user',
           content: [
-            { type: 'input_text', text: userPrompt },
+            {
+              type: 'input_text',
+              text: userPrompt,
+            },
             {
               type: 'input_image',
-              detail: env.OPENAI_IMAGE_DETAIL || 'high',
               image_url: `data:${mimeType};base64,${imageBase64}`,
             },
           ],
