@@ -127,13 +127,52 @@ function shouldRetryParsedResult(result) {
   return false
 }
 
+async function uploadImageFile(apiKey, imageBase64, mimeType) {
+  const binaryString = atob(imageBase64)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+
+  const blob = new Blob([bytes], { type: mimeType })
+  const ext = mimeType === 'image/png' ? 'png' : 'jpg'
+
+  const formData = new FormData()
+  formData.append('purpose', 'vision')
+  formData.append('file', blob, `receipt.${ext}`)
+
+  const response = await fetch('https://api.openai.com/v1/files', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`File upload failed ${response.status}: ${errorText}`)
+  }
+
+  const data = await response.json()
+  return data.id
+}
+
+async function deleteImageFile(apiKey, fileId) {
+  try {
+    await fetch(`https://api.openai.com/v1/files/${fileId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+  } catch {
+    // silently ignore
+  }
+}
+
 async function callOpenAI({
   apiKey,
   model,
   developerPrompt,
-  imageBase64,
-  mimeType,
-  detail = 'low',
+  fileId,
+  detail = 'high',
 }) {
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -153,7 +192,7 @@ async function callOpenAI({
           content: [
             {
               type: 'input_image',
-              image_url: `data:${mimeType};base64,${imageBase64}`,
+              file_id: fileId,
               detail,
             },
             {
@@ -227,6 +266,8 @@ async function callOpenAI({
 }
 
 async function parseWithTiering({ apiKey, imageBase64, mimeType }) {
+  const fileId = await uploadImageFile(apiKey, imageBase64, mimeType)
+
   const attempts = [
     {
       model: PRIMARY_MODEL,
@@ -248,30 +289,33 @@ async function parseWithTiering({ apiKey, imageBase64, mimeType }) {
   let lastResult = null
   let lastError = null
 
-  for (const attempt of attempts) {
-    try {
-      const raw = await callOpenAI({
-        apiKey,
-        model: attempt.model,
-        developerPrompt: attempt.prompt,
-        imageBase64,
-        mimeType,
-        detail: attempt.detail,
-      })
+  try {
+    for (const attempt of attempts) {
+      try {
+        const raw = await callOpenAI({
+          apiKey,
+          model: attempt.model,
+          developerPrompt: attempt.prompt,
+          fileId,
+          detail: attempt.detail,
+        })
 
-      const normalized = normalizeParsedResult(raw)
-      lastResult = normalized
+        const normalized = normalizeParsedResult(raw)
+        lastResult = normalized
 
-      if (!shouldRetryParsedResult(normalized)) {
-        return normalized
+        if (!shouldRetryParsedResult(normalized)) {
+          return normalized
+        }
+      } catch (error) {
+        lastError = error
       }
-    } catch (error) {
-      lastError = error
     }
-  }
 
-  if (lastResult) return lastResult
-  throw lastError || new Error('Failed to parse receipt')
+    if (lastResult) return lastResult
+    throw lastError || new Error('Failed to parse receipt')
+  } finally {
+    deleteImageFile(apiKey, fileId)
+  }
 }
 
 export async function onRequestOptions() {
