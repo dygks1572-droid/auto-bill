@@ -1,4 +1,4 @@
-import { BAKERY_MENU, PRODUCT_CATALOG } from '../data/bakeryMenu'
+import { BAKERY_MENU, PRODUCT_CATALOG } from '../data/bakeryMenu.js'
 
 const product = (
   name,

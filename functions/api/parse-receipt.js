@@ -195,6 +195,7 @@ export async function onRequestPost(context) {
       'For long names (e.g., "잠봉뵈르 샌드위치", "호두 크랜베리 깜빠뉴", "이지드립"), do NOT abbreviate, cut, or hallucinate words (like 스딩워치, 장볼빠른, 세드위치, 깨비빔밥, 이즈드랍). Extract them exactly as printed including spaces.',
       'Regular main products MUST have isOption=false. ONLY set isOption=true for sub-options starting with "+" or "ㄴ" (e.g., "ㄴ 이웃 블렌드(달콤)"). even if amount is 0, they are options. If no quantity is visible for the option, use qty=1.',
       'When product names are hard to read, prefer the visible letters and spacing rather than replacing them with generic words.',
+      'If the same product name appears on multiple separate rows each with its own quantity and price, every row is a distinct main item with isOption=false — do NOT mark the second or later occurrence as an option.',
     ].join(' ')
 
     const primaryUserPrompt = `Analyze receipt image ${fileName} carefully and return the schema only. Read small, faint, low-contrast, and tightly packed text carefully.`

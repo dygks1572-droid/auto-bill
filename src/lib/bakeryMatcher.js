@@ -340,6 +340,7 @@ export function isOptionLineName(rawName) {
   const normalized = normalizeText(trimmed)
   return OPTION_NAMES.some((name) => {
     const normalizedOption = normalizeText(name)
+    if (!normalizedOption) return false
     return normalizedOption === normalized || normalized.endsWith(normalizedOption)
   })
 }
