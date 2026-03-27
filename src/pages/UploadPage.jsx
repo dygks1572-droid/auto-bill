@@ -360,7 +360,7 @@ export default function UploadPage() {
                         </div>
                         <div className="uploadFact emphasis">
                           <span>베이커리 합계</span>
-                          <strong>{computed.bakeryTotal.toLocaleString()}원</strong>
+                          <strong>{bakeryTotal.toLocaleString()}원</strong>
                         </div>
                         <div className="uploadFact">
                           <span>인식 품목</span>
