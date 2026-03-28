@@ -6,24 +6,25 @@ const FALLBACK_MODEL = 'gpt-4o'
 
 const baseDeveloperPrompt = [
   'Extract Korean bakery/cafe receipt data. Return JSON only.',
-  'Detect source: 쿠팡이츠, 배민, 픽업, 매장 POS, or null.',
+  'Detect source: 쿠팡이츠, 배민, 픽업, 매장 POS, or null. If receipt header says a store name with POS-style layout, use "매장 POS".',
   'Prefer total from labels: 주문금액, 총 결제금액, 합계(카드), 결제금액, 합계.',
-  'rawItems: array of ALL product/option name strings exactly as printed. Do NOT merge name+qty+price into one string. Each element is the product name only. Include option rows too.',
-  'bakeryBreakdown: only solid bakery/pastry/bread items. Exclude all drinks (라떼, 아메리카노, 드립커피, 이지드립 etc), drink options (ICE, HOT, 샷추가), and delivery fees.',
-  'Bakery examples: 에그타르트, 마늘빵, 양버터, 베이커리 츄러스, 휘낭시에, 잠봉뵈르 샌드위치, 호두 크랜베리 깜빠뉴, 아보카도 샌드위치, 오늘의 샐러드.',
+  'rawItems: array of ALL product/option name strings exactly as printed. Each element is the product name only (no qty/price). Include option rows.',
+  'bakeryBreakdown: ONLY solid baked goods / pastry / bread / sandwich / salad items.',
+  'Bakery YES examples: 에그타르트, 마늘빵, 양버터, 베이커리 츄러스, 휘낭시에, 잠봉뵈르 샌드위치, 호두 크랜베리 깜빠뉴, 아보카도 샌드위치, 오늘의 샐러드.',
+  'Bakery NO / EXCLUDE: 이지드립, 드립커피, 아메리카노, 라떼, 카페라떼, 카푸치노, 에스프레소, 아이스티, 아이스 아메리카노, 호두 그레너베리 깜빵뉴 (drip coffee/latte/espresso). These are drinks, NOT bakery.',
   'Read Korean text exactly as printed. Do NOT hallucinate or abbreviate names.',
-  'OPTIONS: Rows starting with +, ㄴ, or indented under a main item are options. For financier (휘낭시에) items, treat flavor names like 플레인, 무화과, 약과, 발로나초코, 고르곤졸라크림치즈 as options.',
-  'Each bakeryBreakdown item must include an "options" array. Each option has {name, optionCharge}. optionCharge is the surcharge (e.g. 무화과 +400 → optionCharge=400, 플레인 +0 → optionCharge=0).',
+  'OPTIONS: Rows starting with +, ㄴ, or indented under a main item are options. For financier (휘낭시에) items, 플레인/무화과/약과/발로나초코/고르곤졸라크림치즈 are ALWAYS options of 휘낭시에, never standalone bakery items.',
+  'Each bakeryBreakdown item must include an "options" array. Each option has {name, optionCharge}.',
+  'CRITICAL: 무화과, 플레인, 약과 etc. must NEVER appear as standalone bakeryBreakdown items. They must be inside a 휘낭시에 item\'s options array.',
   'amount in bakeryBreakdown = (base unit price + sum of option charges) × qty.',
   'bakeryTotal = sum of all bakeryBreakdown amounts.',
 ].join(' ')
 
 const rescueDeveloperPrompt = [
   baseDeveloperPrompt,
-  'Re-read the receipt from scratch. Focus on item rows, option rows, totals, and bakery classification.',
-  'Be extra careful with: 잠봉뵈르 샌드위치, 호두 크랜베리 깜빠뉴, 이지드립, 휘낭시에 options.',
-  'Ensure rawItems contains clean product names only. Include option names in rawItems too.',
+  'Re-read carefully. Ensure 이지드립 is NOT in bakeryBreakdown (it is coffee). Ensure 무화과/플레인 are inside 휘낭시에 options, not standalone.',
 ].join(' ')
+
 
 
 function corsHeaders() {
@@ -64,7 +65,7 @@ function safeJsonParse(text) {
 function normalizeParsedResult(result) {
   if (!result || typeof result !== 'object') return null
 
-  const bakeryBreakdown = Array.isArray(result.bakeryBreakdown)
+  let bakeryBreakdown = Array.isArray(result.bakeryBreakdown)
     ? result.bakeryBreakdown
         .filter(Boolean)
         .map((item) => {
@@ -88,6 +89,7 @@ function normalizeParsedResult(result) {
         .filter((item) => item.name && item.qty >= 0 && item.amount >= 0)
     : []
 
+  bakeryBreakdown = postProcessBakeryBreakdown(bakeryBreakdown)
   const bakeryTotal = bakeryBreakdown.reduce((sum, item) => sum + item.amount, 0)
 
   return {
@@ -99,6 +101,77 @@ function normalizeParsedResult(result) {
     bakeryTotal,
     bakeryBreakdown,
   }
+}
+
+const DRINK_KEYWORDS = [
+  '이지드립', '드립커피', '드립', '아메리카노', '라떼', '카페라떼',
+  '카푸치노', '에스프레소', '아이스티', '마체', '스무디',
+  '이즈드립', '이즈치즈', '이지드랍', '이지듥립',
+]
+
+const FINANCIER_OPTION_NAMES = [
+  '플레인', '무화과', '약과', '발로나초코', '고르곤졸라크림치즈',
+  '고르곤졸라', '초코', '크림치즈',
+]
+
+const OCR_CORRECTIONS = {
+  '잠봉뵈르 스콘위치': '잠봉뵈르 샌드위치',
+  '잠본뵈르 샌드위치': '잠봉뵈르 샌드위치',
+  '장별로 샌드위치': '잠봉뵈르 샌드위치',
+  '장별로 스콘위치': '잠봉뵈르 샌드위치',
+  '호두 그래프베리 깜빼뉴': '호두 크랜베리 깜빠뉴',
+  '호두 그래프베리 깜빼뉴': '호두 크랜베리 깜빠뉴',
+  '호두 그레너베리 깜빵뉴': '호두 크랜베리 깜빠뉴',
+  '이즈치즈': '이지드립',
+  '이즈드립': '이지드립',
+  '이지듥립': '이지드립',
+  '이지드랍': '이지드립',
+}
+
+function postProcessBakeryBreakdown(breakdown) {
+  let items = breakdown.map((item) => {
+    let name = item.name
+    for (const [wrong, correct] of Object.entries(OCR_CORRECTIONS)) {
+      if (name === wrong) {
+        name = correct
+        break
+      }
+    }
+    return { ...item, name }
+  })
+
+  items = items.filter((item) => {
+    const lower = item.name.toLowerCase()
+    return !DRINK_KEYWORDS.some((kw) => lower.includes(kw))
+  })
+
+  const standaloneOptions = []
+  const nonOptions = []
+
+  for (const item of items) {
+    const isFinancierOption = FINANCIER_OPTION_NAMES.some(
+      (opt) => item.name === opt || item.name.startsWith('+ ' + opt) || item.name.startsWith('ㄴ ' + opt),
+    )
+    if (isFinancierOption) {
+      standaloneOptions.push(item)
+    } else {
+      nonOptions.push(item)
+    }
+  }
+
+  if (standaloneOptions.length > 0) {
+    const financierItem = nonOptions.find((item) => item.name.includes('휘낭시에'))
+    if (financierItem) {
+      for (const opt of standaloneOptions) {
+        financierItem.options.push({
+          name: opt.name.replace(/^[+\u3134]\s*/, ''),
+          optionCharge: opt.amount || 0,
+        })
+      }
+    }
+  }
+
+  return nonOptions
 }
 
 function shouldRetryParsedResult(result) {
